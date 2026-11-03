@@ -60,25 +60,196 @@ consistency review, not the mere existence of a solver.
 1. **One canonical model.** Network topology, layer metadata, activation
    definitions, parameter tensor shapes/layout, and parameter values have
    an unambiguous, backend-independent representation.
-2. **Separate model from execution.** Approximate CPU, validated CPU, and
-   future external backend evaluators must preserve agreed network semantics.
-   An optimized floating-point backend is not automatically a certified
-   implementation of the mathematical model.
-3. **Use dedicated dense kernels.** The training engine needs efficient
-   batched forward/backward propagation and gradients with respect to
-   trainable parameters. Function's reverse differentiation of general
-   procedures can be reused for interoperability or checking, but is not
-   assumed to be an efficient DNN training implementation.
+2. **Separate model from execution.** The canonical network and its parameter
+   snapshot are independent from backend-owned tensors, execution graphs,
+   devices, and optimizer state. Approximate CPU, validated Ariadne, LibTorch,
+   and MLX must implement compatible model semantics; they need not use the
+   same algorithms, memory layout, derivatives, or numerical precision.
+   An optimized floating-point backend is not a certified implementation.
+3. **Use dedicated dense kernels where appropriate.** The native CPU engine
+   needs efficient batched forward/backward propagation and gradients with
+   respect to trainable parameters. External backends should use their own
+   tensor operations, autodiff and optimizers rather than emulate the native
+   backpropagation engine. Function's reverse differentiation can help with
+   interoperability or checking, not as the default DNN training engine.
 4. **No mandatory external machine-learning runtime.** The portable
    implementation relies on standard C++20 and the existing Ariadne stack.
-   Optional LibTorch and MLX adapters are isolated from the core API and
-   from validated execution.
+   LibTorch and MLX are optional, independently compiled C++ integrations,
+   isolated from core public headers and validated execution. The backend
+   abstraction must be defined before implementing native CPU inference.
 5. **Preserve mathematical evidence.** Approximate results, rigorous interval
    enclosures, and proven structural properties must never be conflated.
    Failure to prove a property is not proof of its negation.
 6. **Minimize premature abstractions.** The first implementation targets
    sequential dense feed-forward networks; general tensor/autograd engines,
    convolutions, recurrent models and attention are outside the initial scope.
+
+## Multi-backend model and execution architecture
+
+**Design decision (2026-11-03; specified, not yet implemented):** The
+general neural-network abstraction is a backend-independent *model definition
+and parameter snapshot*, with several materially different execution
+implementations. A common public facade is desirable; a common internal tensor
+engine, universal autodiff tape, or base class inherited by all backend
+tensors is not. In particular, native CPU implementation details must not
+become assumptions of the PyTorch and MLX integrations.
+
+### Three conceptual layers
+
+1. **Model and parameter semantics (backend-neutral):** immutable topology
+   and activation descriptors; dimension and parameter-shape validation;
+   layer and parameter identities; semantic restrictions and structural
+   constraints; explicit weight and bias order; parameter-value format;
+   serialization and frozen model identity. The canonical model contains
+   no `torch::Tensor`, `mlx::core::array`, device handle, task pool, or
+   execution graph.
+2. **Backend-specific execution and learning:** a lightweight C++ facade
+   dispatches a *whole evaluation, derivative request, or training step* to
+   a backend implementation or execution session. The native CPU backend
+   can use Ariadne arrays and specialized loops; LibTorch uses the PyTorch
+   C++ frontend; MLX uses the MLX C++ array/transformation API; validated
+   evaluation uses Ariadne's rigorous arithmetic. Do not insert virtual
+   calls or canonical-tensor conversions into individual neuron operations.
+3. **Backend-independent orchestration:** inference and training requests,
+   loss and optimizer *descriptors*, checkpoint policies, freeze masks, and
+   test reporting refer to model semantics. Their implementation is delegated
+   to the selected backend, which may reject unsupported capabilities.
+   A universal `Optimizer` instance or identical internal optimizer state
+   across runtimes is explicitly **not** required.
+
+Illustrative control flow (not a committed C++ API):
+
+```text
+                CanonicalNetwork + ParameterSnapshot
+                                   |
+                    Backend selection / capabilities
+                                   |
+        +--------------------------+------------------------+
+        |             |            |                       |
+    Native CPU    Ariadne validated    LibTorch C++       MLX C++
+        |             |            |                       |
+    inference     interval bounds    inference/train    inference/train
+    training      derivative bounds  native autograd     native autodiff
+    backprop      no default train   native optimizer    native execution
+        |             |            |                       |
+        +-------------+------------+-----------------------+
+                      |
+          explicit parameter export / snapshot
+                      |
+            Function-compatible frozen view
+                      |
+          Reasoning verification (outside Neural)
+```
+
+Each implementation may privately compile or cache an efficient model
+representation. Cache keys must include model topology, parameter snapshot
+identity, numeric type, device, and every option that affects execution
+semantics. Training updates a backend's mutable working parameters; exporting
+a frozen snapshot is an explicit operation. It must not silently mutate a
+previously exported snapshot or invalidate an already established certificate
+without recording that change.
+
+### Planned backend capabilities
+
+The following table states intended development targets, **not functionality
+present in the repository at this date**.
+
+| Backend | Approximate inference | Training/derivatives | Rigorous enclosures | Dependency |
+| --- | --- | --- | --- | --- |
+| Native CPU | Yes, reference and optimized implementations | Manual backpropagation and native optimizers | No, unless executed through a validated evaluator | Existing Ariadne dependencies only |
+| Ariadne validated | Rigorous input/output evaluation | Validated input derivative enclosures; no default optimizer | Yes, with stated arithmetic/domain hypotheses | Existing Ariadne numerical stack |
+| LibTorch | Yes | PyTorch C++ autograd and optimizers, subject to capability checks | No | Optional LibTorch integration |
+| MLX | Yes | MLX C++ differentiation and framework-native training steps, subject to capability checks | No | Optional Apple/MLX integration |
+
+Capability negotiation must be explicit and feature-granular: operations,
+activations, data types, device, batch support, gradient mode, training,
+serialization/conversion and validated computation. Unsupported combinations
+must fail clearly or require an *explicit* fallback; they must never silently
+lose requested validation guarantees. Backend support must be confirmed by
+builds and tests against selected library versions, not guessed from the
+existence of a Python API.
+
+The first public facade should make backend selection and capabilities
+observable but keep the exact class names provisional until M1 tests its
+requirements. Internal implementations may use compile-time templates,
+type-erasure or PIMPL as convenient. Do **not** force a virtual per-layer
+or per-scalar interface, a generic high-level tensor language, or a dependency
+on LibTorch/MLX just to build a native-only consumer.
+
+### Representation, conversion and numerical contracts
+
+Define the canonical dense affine operator as
+`y[o] = bias[o] + sum_i weight[o,i] * input[i]`, with
+`weight` shaped `[out_features, in_features]`. Define batched inputs
+as logical `[batch, features]`. These are **logical indexing contracts**,
+not a requirement that every runtime stores tensors identically.
+
+- Specify element type/precision, array orientation, parameter ordering,
+  strides, activation conventions, and treatment of non-finite values.
+  Each adapter must map the canonical format to its native representation.
+- Store canonical checkpoints using a versioned, backend-independent
+  representation that can preserve the intended numeric values/bit patterns.
+  External framework checkpoints and optimizer states may be supported as
+  separate, backend-specific artifacts; they do not replace the canonical
+  interchange format.
+- Parameter transfer is explicit. Materialize asynchronous/lazy data and
+  synchronize devices as needed; report precision conversions and reject
+  unsupported dtypes rather than silently losing mathematical information.
+  A conversion that changes parameters produces a distinct snapshot.
+- Checkpoints used for validation identify the *frozen* model and semantic
+  activation behavior, not an opaque external execution graph. Rigorous
+  validation starts from explicitly represented parameter values and
+  rounding assumptions, **not** from an unvalidated GPU output.
+- Mathematical equivalence and bounded approximate numerical error are
+  the interoperability goal, not bitwise equality across CPU, CUDA, Metal
+  or differing execution orders. Optimizer trajectories may diverge.
+- Distinguish input derivatives, parameter gradients, reverse-mode
+  vector-Jacobian products and full Jacobians. The backend advertises
+  which are supported. ReLU and other nonsmooth activations require
+  documented derivative conventions.
+
+### Build and test separation
+
+A likely eventual source layout is `include/neural/` for backend-neutral
+headers, `src/cpu/` and `src/validated/` for first-party executors, and
+separate optional `backends/libtorch/` and `backends/mlx/` for integration
+targets. These are **proposed directories** and must not be created without
+real source files.
+
+The core CMake targets and default CI must not require external runtime
+headers, libraries or Python packages. Optional integrations should be
+enabled explicitly, with independent dependency discovery, version
+compatibility checks, and CI on suitable machines. MLX integration is
+platform-constrained; it cannot be made a mandatory Windows/Linux test
+dependency. Do not assume the higher-level MLX Python `mlx.nn` API has
+a class-for-class equivalent in C++; use the C++ array and differentiation
+capabilities as the integration baseline.
+
+### Compatibility test protocol
+
+For each external backend, test a common fixture set that includes an
+affine network, a multilayer smooth network, a ReLU network (excluding kink
+points for classical gradient comparison), and at least one minibatch
+training step.
+
+1. Export a canonical snapshot; import it into the backend; compare
+   inference against a separate analytic or reference CPU oracle.
+2. Compare input derivatives and parameter gradients against independently
+   established formulas away from nondifferentiable points.
+3. For training, compare one update with an independently calculated step
+   **only** when optimizer definitions, loss reduction and numerical
+   precision match. Record differences in weight decay, epsilon placement,
+   scheduling, gradient accumulation and RNG semantics.
+4. Export a trained snapshot; ensure the validated native backend can
+   consume its explicitly typed parameters, with conversion errors
+   accounted for. Do not regard external-backend predictions as validated.
+5. Verify capability rejection, precision and device errors, model identity,
+   frozen parameters and copy/synchronization semantics.
+
+A small optional LibTorch/MLX integration spike should be considered after
+M2 (and an autodiff/training spike after M3/M4) to reveal API incompatibilities
+early. Full optional backend packaging and performance tuning remain in M9;
+the abstraction itself is a required deliverable of M1.
 
 ## Candidate public model and inference concepts
 
@@ -222,25 +393,32 @@ generation step, while its macOS job passed. Root cause has **not yet**
 been established. Treat this as an open investigation, not as a diagnosed
 code defect.
 
-### M1 — Canonical model and parameter invariants
+### M1 — Canonical model, parameter invariants and backend contracts
 
 **Deliverables:** Define the sequential dense feed-forward architecture,
-activation descriptors, tensor/matrix shapes and storage order, weights,
-biases, immutable snapshot semantics, and explicit validation of network
-dimensions. Specify whether numeric representation is part of the model
-or its executor, and distinguish a mathematical model from a concrete
-floating-point execution.
+activation descriptors, logical parameter shapes and order, weights, biases,
+immutable snapshot semantics and explicit dimension validation. Specify
+whether numeric representation is part of the model or its executor, and
+distinguish a mathematical model from a concrete floating-point execution.
+Define backend selection, capabilities, request/response semantics, parameter
+import/export and execution-session ownership **before** writing the native
+CPU evaluator. Keep backend-private tensor, graph, device and optimizer types
+out of public headers.
 
 **Acceptance:** Construct and inspect networks from C++ and Python with
 identical layer and parameter metadata. Reject invalid shapes and
 nonrepresentable configurations without silent truncation. Define empty
 network and zero-dimensional cases explicitly rather than accidentally.
+Exercise a minimal native backend contract and unsupported-capability case;
+show that the same canonical network and frozen snapshot can be handed to a
+future external backend without introducing its headers into the core.
 No general-purpose tensor/autograd engine.
 
 ### M2 — Reference CPU inference
 
-**Deliverables:** Implement one-sample and batched dense forward evaluation
-using dedicated kernels and stable elementary activations: identity,
+**Deliverables:** Implement native CPU as the first concrete execution
+backend behind the M1 contract, with one-sample and batched dense forward
+evaluation using dedicated kernels and stable elementary activations: identity,
 tanh, sigmoid, ReLU, and softplus. Add a sequential reference evaluator
 and define non-finite input/parameter policies, dimension checks,
 storage orientation, and numerical comparison rules.
@@ -253,9 +431,9 @@ inference is exposed through C++ and Python and demonstrated in both
 
 ### M3 — Derivatives and backpropagation
 
-**Deliverables:** Implement layerwise reverse-mode derivatives with
-respect to inputs and to trainable weights/biases, plus per-batch gradient
-accumulation. Differentiate losses from activations, parameter storage,
+**Deliverables:** Implement native CPU layerwise reverse-mode derivatives
+with respect to inputs and to trainable weights/biases, plus per-batch gradient
+accumulation. Backend-native autodiff remains an implementation alternative. Differentiate losses from activations, parameter storage,
 and optimizer state. Define the ReLU kink policy for approximate training;
 never present this convention as a classical derivative valid at zero.
 
@@ -266,9 +444,9 @@ Do not use finite differences themselves as a formal guarantee.
 
 ### M4 — Native training and optimizers
 
-**Deliverables:** Add training datasets/batches, reproducible initialization
-and shuffling, MSE and at least one classification loss, SGD (with
-optional momentum), and AdamW; extend with Adam, Huber, and other losses
+**Deliverables:** Add backend-neutral training requests plus native-CPU
+datasets/batches, reproducible initialization and shuffling, MSE and at least
+one classification loss, SGD (with optional momentum), and AdamW; extend with Adam, Huber, and other losses
 when semantics and tests are established. Introduce Threading-based
 mini-batch execution after a correct sequential implementation exists.
 
@@ -280,10 +458,11 @@ Thread counts must not change the mathematical API contract.
 
 ### M5 — Persistence, freezing, and transfer learning
 
-**Deliverables:** Versioned checkpoint format, exact topology/activation
-metadata, parameter load/save and compatibility checks, frozen
-parameter groups, replacement of output heads, fine-tuning, and clear
-handling of optimizer state and reproducible model identity.
+**Deliverables:** Backend-neutral versioned checkpoint and snapshot format,
+exact topology/activation metadata, typed parameter import/export,
+compatibility checks, frozen parameter groups, replacement of output heads,
+fine-tuning, and clear handling of optional backend-specific optimizer state
+and reproducible model identity.
 
 **Acceptance:** Round trips preserve serialized parameter values and
 semantics as specified; intentional incompatible loads fail explicitly;
@@ -293,8 +472,10 @@ attached to a snapshot must be invalidated by relevant changes.
 
 ### M6 — Validated inference and numerical enclosures
 
-**Deliverables:** Rigorous input-box output enclosures via interval bound
-propagation using Ariadne's directed-rounding/validated numeric facilities.
+**Deliverables:** Implement a distinct Ariadne validated evaluator consuming
+frozen canonical snapshots, with rigorous input-box output enclosures via
+interval bound propagation using Ariadne's directed-rounding/validated numeric
+facilities.
 Extend to derivative enclosures and tighter affine/Taylor propagation
 only after basic inclusions work. Make exact model parameters and their
 conversion into validation arithmetic explicit.
@@ -335,12 +516,15 @@ semantics and performance costs. The existing Barr3 fixture is a
 follow-on integration/performance benchmark for Reasoning or SMT;
 an `UNKNOWN` solver result is not an accepted certificate.
 
-### M9 — Performance and optional backends
+### M9 — Performance and optional backend completion
 
 **Deliverables:** Profile and improve CPU kernels and batching without
 changing the canonical model; compare supported worker counts and
-approximate/validated evaluation costs. Consider external LibTorch/MLX
-adapters only behind optional targets or separate integration layers.
+approximate/validated evaluation costs. Complete optional LibTorch/MLX C++
+implementations behind the backend contract defined in M1, with capability
+checks, conversion tests, and independent optional build targets. Perform
+small, scoped compatibility spikes after M2–M4 instead of discovering
+structural incompatibilities only at the end.
 
 **Acceptance:** Benchmarks report workload, precision, hardware, baseline,
 error tolerance, and numerical equivalence criteria. No mandatory new
@@ -362,9 +546,10 @@ M0 baseline CI
   -> M9 optional optimization / backends
 ```
 
-Some interfaces (especially numeric semantics, parameter freezing, and the
-Function adapter) may need small proof-of-concept tests in an earlier
-milestone to detect architectural incompatibilities. Such experiments
+Some interfaces (especially numeric semantics, parameter freezing,
+backend capabilities, external framework conversions, and the Function
+adapter) may need small proof-of-concept tests in an earlier milestone to
+detect architectural incompatibilities. Such experiments
 must remain bounded and their results must be recorded here; they do
 not change the committed dependency direction.
 
@@ -400,6 +585,7 @@ must **not** carry this header.
 | 2026-11-03 | Bootstrap | Implemented (CI under observation) | Project skeleton, pinned Configuration/Testing/Function/Threading, source and binding smoke tests, shared `tutorial/` directory, CI workflows. No neural model or training implementation. |
 | 2026-11-03 | M0 | Planned / investigation open | Linux/GCC coverage job fails in completed earlier runs; macOS coverage passes. Establish root cause and fix before M1. |
 | 2026-11-03 | Planning | Recorded | Milestones M0–M9 and mandatory per-implementation design-log update policy established; no new runtime functionality in this change. |
+| 2026-11-03 | Multi-backend architecture | Design agreed; not implemented | Split canonical model/snapshot, execution backend and high-level operations; plan native CPU, Ariadne validated, optional LibTorch C++ and MLX C++ implementations. M1 must define backend capabilities and data conversion; no runtime API or code added yet. |
 
 ## Engineering and CI policy
 
