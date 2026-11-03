@@ -1,44 +1,37 @@
 # Ariadne Neural
 
-Ariadne Neural is the planned standalone C++20 framework for dense feed-forward
-neural networks, learning, inference, transfer learning, and validated numerical
-evaluation within Ariadne. It is intended to be portable, CPU-first, and free
-from mandatory third-party machine-learning runtimes. Future optional backends
-may support LibTorch and MLX.
+[![macOS Status](https://github.com/ariadne-cps/neural/actions/workflows/macos.yml/badge.svg)](https://github.com/ariadne-cps/neural/actions/workflows/macos.yml)
+[![Ubuntu Status](https://github.com/ariadne-cps/neural/actions/workflows/ubuntu.yml/badge.svg)](https://github.com/ariadne-cps/neural/actions/workflows/ubuntu.yml)
+[![Windows Status](https://github.com/ariadne-cps/neural/actions/workflows/win.yml/badge.svg)](https://github.com/ariadne-cps/neural/actions/workflows/win.yml)
+[![Sanitizers Status](https://github.com/ariadne-cps/neural/actions/workflows/sanitizers.yml/badge.svg)](https://github.com/ariadne-cps/neural/actions/workflows/sanitizers.yml)
+[![Coverage Status](https://github.com/ariadne-cps/neural/actions/workflows/coverage.yml/badge.svg)](https://github.com/ariadne-cps/neural/actions/workflows/coverage.yml)
+[![codecov](https://codecov.io/gh/ariadne-cps/neural/branch/main/graph/badge.svg)](https://codecov.io/gh/ariadne-cps/neural)
 
-**Status:** M1 canonical topology, frozen binary64 snapshots and backend contracts,
-and M2 native-CPU one-sample and batched reference inference are implemented.
-Gradients, training and formal certification are **not** implemented.
-See [doc/neural_design.md](doc/neural_design.md) for the design and roadmap.
+Ariadne Neural is a standalone C++20 library for dense feed-forward neural networks.
+Its current implementation provides canonical network topology, frozen binary64
+parameter snapshots and native-CPU inference for individual samples and batches.
+Supported layer activations are identity, ReLU, tanh, sigmoid and softplus.
+C++ and Python interfaces expose model metadata, parameter snapshots, backend
+capability queries and CPU inference.
 
 ## Dependencies
 
-Production submodules, pinned to explicit commits:
+Direct Git submodules, pinned to specific commits:
 
-- [Function](https://github.com/ariadne-cps/function) (`ss/fun`): Ariadne
-  function abstractions and the transitive validated numeric/algebra stack.
-- [Threading](https://github.com/ariadne-cps/threading) (`ss/thr`): CPU
-  scheduling, structured tasks, deterministic fixed-block reductions.
-- [Configuration](https://github.com/ariadne-cps/configuration) (`ss/cfg`):
-  shared CMake build configuration.
-
-[Testing](https://github.com/ariadne-cps/testing) (`ss/tst`) is a test-only
-dependency and is **not** linked into the production module. The build checks
-shared transitive dependency commits for consistency.
-
-Neural intentionally has no dependency on SMT, Reasoning, System, Evolution,
-Linear Programming, or Nonlinear Programming. Reasoning is responsible for
-combining Neural with SMT and dynamic-system verification.
+- [Function](https://github.com/ariadne-cps/function) (`ss/fun`).
+- [Threading](https://github.com/ariadne-cps/threading) (`ss/thr`).
+- [Configuration](https://github.com/ariadne-cps/configuration) (`ss/cfg`).
+- [Testing](https://github.com/ariadne-cps/testing) (`ss/tst`, for tests).
 
 ## Layout
 
-- `include/neural/` and `include/ariadne-neural.hpp`: public C++ API.
-- `src/`: compiled Neural objects.
-- `tests/`: standalone C++ tests using Ariadne Testing.
-- `python/bindings/`, `python/tests/`: optional `pyariadne` bindings and tests.
-- `tutorial/`: C++ and Python `tutorial_neural` examples together, plus
-  standalone CMake files for the installed C++ consumer.
-- `doc/neural_design.md`: goals, design decisions, and implementation roadmap.
+- `include/neural/`: public headers, including `inference.hpp`.
+- `include/ariadne-neural.hpp`: umbrella header.
+- `src/`: implementation sources, including `inference.cpp`.
+- `tests/`: C++ tests.
+- `python/bindings/` and `python/tests/`: Python bindings and tests.
+- `tutorial/`: C++ and Python examples.
+- `doc/neural_design.md`: design journal and roadmap.
 
 ## Build and test
 
@@ -50,8 +43,9 @@ cmake --build build --parallel --target tests
 ctest --test-dir build --output-on-failure
 ```
 
-The CMake dependency system initializes required Git submodules as needed.
-For a standalone release installation:
+CMake initializes the required Git submodules.
+
+To build and install the release library and Python bindings:
 
 ```sh
 cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
@@ -59,11 +53,8 @@ cmake --build build-release --parallel --target ariadne-neural bindings
 cmake --install build-release --prefix /path/to/install
 ```
 
-Optional Python bindings require Python 3.11+ with development headers;
-set `-DBUILD_PYTHON_BINDINGS=OFF` to omit them. When enabled, the bindings
-are composed into a single `pyariadne` module like the other Ariadne
-components. Python bindings expose M2 CPU `infer()` and `infer_batch()` as well as
-`neural_version()`.
+Python bindings require Python 3.11+ development headers and are composed into
+the `pyariadne` module. Set `-DBUILD_PYTHON_BINDINGS=OFF` to disable them.
 
 ## License
 

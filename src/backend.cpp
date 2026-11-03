@@ -23,7 +23,7 @@
  */
 
 #include "neural/backend.hpp"
-#include "cpu/inference.hpp"
+#include "neural/inference.hpp"
 
 #include <stdexcept>
 #include <utility>

@@ -156,7 +156,8 @@ The following table states intended development targets, **not functionality
 present in the repository at this date**.
 
 | Backend | Approximate inference | Training/derivatives | Rigorous enclosures | Dependency |
-| --- | --- | --- | --- | --- |
+| --- | --- | --- | --- |
+| 2026-11-03 | Layout and README correction | Implemented; CI pending | Relocated the CPU inference public header to `include/neural/inference.hpp` and source to `src/inference.cpp` (no nested folders). Updated CMake and include directives. README now lists only actual capabilities and dependencies and adds the standard five workflow badges and Codecov badge. No inference behavior changed; test/build CI still required. | --- |
 | Native CPU | Yes, reference and optimized implementations | Manual backpropagation and native optimizers | No, unless executed through a validated evaluator | Existing Ariadne dependencies only |
 | Ariadne validated | Rigorous input/output evaluation | Validated input derivative enclosures; no default optimizer | Yes, with stated arithmetic/domain hypotheses | Existing Ariadne numerical stack |
 | LibTorch | Yes | PyTorch C++ autograd and optimizers, subject to capability checks | No | Optional LibTorch integration |
@@ -276,11 +277,10 @@ not a requirement that every runtime stores tensors identically.
 
 ### Build and test separation
 
-A likely eventual source layout is `include/neural/` for backend-neutral
-headers, `src/cpu/` and `src/validated/` for first-party executors, and
-separate optional `backends/libtorch/` and `backends/mlx/` for integration
-targets. These are **proposed directories** and must not be created without
-real source files.
+The current layout keeps public headers directly in `include/neural/` and
+implementation sources directly in `src/`, with no nested directories in either.
+The CPU inference header is `include/neural/inference.hpp`; its compiled
+implementation is `src/inference.cpp`.
 
 The core CMake targets and default CI must not require external runtime
 headers, libraries or Python packages. Optional integrations should be
@@ -508,7 +508,7 @@ inference is exposed through C++ and Python and demonstrated in both
 Python. Inputs are logical [batch, input_dimension] rows and results are
 [batch, output_dimension] rows; an empty batch produces an empty result.
 Every row is dimension- and finiteness-validated before the batch evaluates.
-The dedicated `src/cpu/inference.cpp` evaluates canonical output-major
+The dedicated `src/inference.cpp` evaluates canonical output-major
 weights, accumulating from the bias with binary64 `std::fma` in feature
 order. Identity, ReLU, tanh, sigmoid (sign-conditional exponential), and
 softplus (stable `log1p` formulation) are supported. This is approximate
@@ -685,12 +685,13 @@ must **not** carry this header.
 | 2026-11-03 | Multi-backend architecture | Design agreed; not implemented | Split canonical model/snapshot, execution backend and high-level operations; plan native CPU, Ariadne validated, optional LibTorch C++ and MLX C++ implementations. M1 must define backend capabilities and data conversion; no runtime API or code added yet. |
 | 2026-11-03 | M1 core implementation | Implemented; CI pending | Added `NeuralNetwork`, `NeuralDenseLayerSpec`, `NeuralDenseLayerLayout`, `NeuralParameterSnapshot`, `NeuralExecutionSession`, backend/operation enums and truthful capability queries. Added C++ `test_network`/`test_backend`, Python `test_network.py`, matching tutorial updates and umbrella headers. No inference, gradients, training, or persistence yet. Validation: positive dimensions, nonempty layers, known activations, overflow-checked weight/bias offsets, finite binary64 parameters, matching array lengths, and rejection of unsupported backends. |
 
-| 2026-11-03 | M2 compile integration fix | Implemented; full CI pending | Corrected CPU source's self-directory header include to `inference.hpp` (`src/backend.cpp` retains `cpu/inference.hpp`), and explicitly rejected unexpected activations with a `default` case so `-Wswitch-default -Werror` remains clean. Trigger: macOS arm64 Clang failed before tests at missing header; verify all platform CI at this commit. |\n| 2026-11-03 | M2 CPU inference | Implemented; full CI pending | Added NativeCpu single/batch forward API, row-major FMA kernels, stable activation functions, input and intermediate checks; C++/Python tests and tutorials. No gradients or validated evaluation. Windows regression must be rerun and diagnosed. |
+| 2026-11-03 | M2 compile integration fix | Implemented; full CI pending | Corrected the initial CPU source header resolution, and explicitly rejected unexpected activations with a `default` case so `-Wswitch-default -Werror` remains clean. Trigger: macOS arm64 Clang failed before tests at missing header; verify all platform CI at this commit. |
+| 2026-11-03 | M2 CPU inference | Implemented; full CI pending | Added NativeCpu single/batch forward API, row-major FMA kernels, stable activation functions, input and intermediate checks; C++/Python tests and tutorials. No gradients or validated evaluation. Windows regression must be rerun and diagnosed. |
 | 2026-11-03 | Testing performance regression | Dependency propagation; CI pending | Updated Testing, Function, and Threading gitlinks after fixing eager operand rendering for successful console assertions. Numeric oracle checks are unchanged; no neural architecture or runtime semantics altered. |
 
 ## Engineering and CI policy
 
-Follow the modular Ariadne layout: `include/neural`, `src`, `tests`,
+Follow the modular Ariadne layout: flat `include/neural`, flat `src`, `tests`,
 `python/bindings`, `python/tests`, a single `tutorial/` directory holding
 both `tutorial_neural.cpp` and `tutorial_neural.py`, and `doc`; provide
 `include/ariadne-neural.hpp` as the umbrella header.

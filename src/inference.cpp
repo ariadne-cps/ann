@@ -1,5 +1,5 @@
 /***************************************************************************
- *            src/cpu/inference.cpp
+ *            src/inference.cpp
  *
  *  Copyright  2026  Luca Geretti
  *
@@ -22,7 +22,7 @@
  *  along with Ariadne Neural.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "inference.hpp"
+#include "neural/inference.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <utility>

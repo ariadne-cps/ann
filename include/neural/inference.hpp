@@ -1,5 +1,5 @@
 /***************************************************************************
- *            src/cpu/inference.hpp
+ *            neural/inference.hpp
  *
  *  Copyright  2026  Luca Geretti
  *
