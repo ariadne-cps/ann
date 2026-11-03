@@ -6,10 +6,10 @@ evaluation within Ariadne. It is intended to be portable, CPU-first, and free
 from mandatory third-party machine-learning runtimes. Future optional backends
 may support LibTorch and MLX.
 
-**Status:** This repository currently contains only the project scaffold,
-build integration, and smoke tests. No neural network model, training algorithm,
-or formal certification functionality has been implemented yet. See
-[doc/neural_design.md](doc/neural_design.md) for the agreed design direction.
+**Status:** The M1 canonical dense-network topology, frozen binary64
+parameter snapshots and native-CPU snapshot import contract are implemented.
+Inference, gradients, training and formal certification are **not** implemented.
+See [doc/neural_design.md](doc/neural_design.md) for the design and roadmap.
 
 ## Dependencies
 

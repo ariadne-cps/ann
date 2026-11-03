@@ -27,8 +27,13 @@
 
 namespace Ariadne {
 
-// Bootstrap API only: neural model, inference and training types are not yet
-// implemented. Keep the public surface minimal until their contracts settle.
+/** @file neural/neural.hpp
+ *  @brief Ariadne Neural module version and bootstrap declarations.
+ */
+
+/** @brief Return the Ariadne Neural module version.
+ *  @return A static, null-terminated semantic-version string.
+ */
 const char* neural_version() noexcept;
 
 } // namespace Ariadne

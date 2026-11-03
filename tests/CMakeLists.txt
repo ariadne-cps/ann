@@ -2,6 +2,8 @@ include(CTest)
 
 set(UNIT_TESTS
     test_neural
+    test_network
+    test_backend
     test_umbrella
 )
 

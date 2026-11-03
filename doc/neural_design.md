@@ -4,9 +4,10 @@
 
 This document records the initial design decisions for the `ariadne-cps/neural`
 repository. It is a design journal and roadmap, **not** a claim that the
-features below have already been implemented. The initial repository bootstrap
-contains build infrastructure, a minimal public header, smoke tests, and
-optional Python binding registration.
+features below have already been implemented. The initial repository bootstrap established build infrastructure and smoke
+bindings. M1 now implements the canonical dense network topology, frozen
+binary64 parameter snapshots, and a backend capability/import boundary;
+forward inference and training remain unimplemented.
 
 Ariadne Neural aims to provide an autonomous, portable, CPU-first C++20
 framework for neural-network inference and learning. Its distinctive goal is
@@ -175,6 +176,71 @@ requirements. Internal implementations may use compile-time templates,
 type-erasure or PIMPL as convenient. Do **not** force a virtual per-layer
 or per-scalar interface, a generic high-level tensor language, or a dependency
 on LibTorch/MLX just to build a native-only consumer.
+
+### M1 implemented contracts and explicit limitations
+
+The M1 C++ public API is in `include/neural/network.hpp` and
+`include/neural/backend.hpp`; implementations are confined to
+`src/network.cpp` and `src/backend.cpp`. Declarations are documented with
+Doxygen, including exceptions, mathematical indexing and implementation
+limits. The existing `include/ariadne-neural.hpp` umbrella includes both.
+
+- `NeuralNetwork(input_dimension, layers)` requires a positive input
+  dimension and at least one dense layer, with a positive output dimension
+  and a recognized elementwise activation at each layer. A zero-layer or
+  zero-dimensional network is unsupported; this is a deliberate initial
+  restriction rather than silently modeling an identity network.
+- Every layer's `weights_offset` denotes a row-major logical
+  `[outputs, inputs]` array, followed immediately by its bias vector
+  starting at `biases_offset`. All counts and offsets are checked for
+  `size_t` overflow *before* allocating parameter arrays. Activation
+  evaluation itself is not yet implemented.
+- `NeuralParameterSnapshot` owns a frozen copy or moved instance of
+  its topology plus an exact-length vector of finite `double` values.
+  Copying or exporting it produces independent values. In this phase
+  binary64 values are the canonical approximation parameter format;
+  future exact/validated parameter representations must be separately
+  specified, not silently converted. Signed zero is preserved.
+- `NeuralExecutionSession` owns its imported frozen snapshot.
+  Only `NativeCpu` is currently marked available; only
+  `ImportSnapshot` is marked supported. Selecting AriadneValidated,
+  LibTorch or MLX raises an error rather than silently falling back.
+  Calling `require(Inference)`, `require(Training)` or
+  `require(ValidatedBounds)` on the CPU session raises an error. These
+  capability results must be updated **only alongside actual backend
+  implementation and its tests**.
+- Python bindings expose the same metadata and snapshots, with exported
+  parameter vectors returned as Python-owned copies, not borrowed
+  mutable storage. The tutorial examples illustrate construction and
+  capability inspection, **not** forward inference.
+
+The native session currently stores the snapshot directly, with no
+backend-specific graph, execution cache or device state. An execution
+request interface may be added in M2, and a mutable training workspace in
+M4; neither should alter the frozen snapshot semantics.
+
+**Validation commands for this increment:**
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DWARNINGS_AS_ERRORS=ON
+cmake --build build --parallel --target tests
+ctest --test-dir build --output-on-failure
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
+cmake --build build-release --parallel --target ariadne-neural bindings
+```
+
+Test files added in M1: `tests/test_network.cpp`,
+`tests/test_backend.cpp`, and `python/tests/test_network.py`.
+These cover indexing, validation, overflow, finite parameters, copies,
+rejection of unavailable backends, and capability declarations.
+The existing Python CTest command now discovers the full
+`python/tests/` directory.
+
+At authorship, compiling the full Ariadne stack locally was not possible
+because the execution environment could not resolve github.com to fetch
+Git submodules. CI is the independent compilation and runtime gate.
+The existing GCC coverage failure due to an unused `include/*` pattern
+is unchanged; as previously agreed, this phase does not suppress it.
 
 ### Representation, conversion and numerical contracts
 
@@ -414,6 +480,14 @@ show that the same canonical network and frozen snapshot can be handed to a
 future external backend without introducing its headers into the core.
 No general-purpose tensor/autograd engine.
 
+**M1 implementation status:** topology, frozen binary64 parameter vectors,
+backend enumeration, capabilities and snapshot-import sessions are implemented
+with C++ and Python APIs and focused tests. The current NativeCpu backend can
+only import a snapshot; it has no forward pass or training. Backend-specific
+device configuration, general-purpose execution requests, persistent
+serialization and non-binary64 parameters are explicitly deferred.
+
+
 ### M2 — Reference CPU inference
 
 **Deliverables:** Implement native CPU as the first concrete execution
@@ -586,6 +660,7 @@ must **not** carry this header.
 | 2026-11-03 | M0 | Planned / investigation open | Linux/GCC coverage job fails in completed earlier runs; macOS coverage passes. Establish root cause and fix before M1. |
 | 2026-11-03 | Planning | Recorded | Milestones M0–M9 and mandatory per-implementation design-log update policy established; no new runtime functionality in this change. |
 | 2026-11-03 | Multi-backend architecture | Design agreed; not implemented | Split canonical model/snapshot, execution backend and high-level operations; plan native CPU, Ariadne validated, optional LibTorch C++ and MLX C++ implementations. M1 must define backend capabilities and data conversion; no runtime API or code added yet. |
+| 2026-11-03 | M1 core implementation | Implemented; CI pending | Added `NeuralNetwork`, `NeuralDenseLayerSpec`, `NeuralDenseLayerLayout`, `NeuralParameterSnapshot`, `NeuralExecutionSession`, backend/operation enums and truthful capability queries. Added C++ `test_network`/`test_backend`, Python `test_network.py`, matching tutorial updates and umbrella headers. No inference, gradients, training, or persistence yet. Validation: positive dimensions, nonempty layers, known activations, overflow-checked weight/bias offsets, finite binary64 parameters, matching array lengths, and rejection of unsupported backends. |
 
 ## Engineering and CI policy
 

@@ -20,9 +20,27 @@
 # You should have received a copy of the GNU General Public License
 # along with Ariadne Neural.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Bootstrap tutorial: the neural model and training API is not implemented yet."""
+"""M1 canonical model and available backend capabilities (no inference yet)."""
 
-from pyariadne import neural_version
+from pyariadne import (
+    NeuralActivation,
+    NeuralDenseLayerSpec,
+    NeuralExecutionSession,
+    NeuralNetwork,
+    NeuralOperation,
+    NeuralParameterSnapshot,
+    neural_version,
+)
 
 if __name__ == "__main__":
+    model = NeuralNetwork(2, [
+        NeuralDenseLayerSpec(3, NeuralActivation.Tanh),
+        NeuralDenseLayerSpec(1, NeuralActivation.Identity),
+    ])
+    snapshot = NeuralParameterSnapshot(model, [0.0] * model.parameter_count())
+    session = NeuralExecutionSession(snapshot)
     print("Ariadne Neural", neural_version())
+    print("Network dimensions:", model.input_dimension(), "->", model.output_dimension())
+    print("Parameters:", model.parameter_count())
+    print("Native CPU snapshot import:", session.supports(NeuralOperation.ImportSnapshot))
+    print("Inference available:", session.supports(NeuralOperation.Inference))

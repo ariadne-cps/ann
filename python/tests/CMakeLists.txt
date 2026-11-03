@@ -18,7 +18,7 @@ endif()
 
 if(PYTHON_TESTS)
     add_custom_target(test_python_neural
-        COMMAND "${Python3_EXECUTABLE}" -m pytest "${CMAKE_CURRENT_SOURCE_DIR}/test_neural.py"
+        COMMAND "${Python3_EXECUTABLE}" -m pytest "${CMAKE_CURRENT_SOURCE_DIR}"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     )
     add_test(NAME test_python_neural

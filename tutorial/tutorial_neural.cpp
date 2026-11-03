@@ -25,8 +25,23 @@
 #include "ariadne-neural.hpp"
 
 #include <iostream>
+#include <vector>
 
 int main() {
-    std::cout << "Ariadne Neural " << Ariadne::neural_version() << '\n';
+    using namespace Ariadne;
+    NeuralNetwork network(2, {{3, NeuralActivation::Tanh},
+                              {1, NeuralActivation::Identity}});
+    NeuralParameterSnapshot parameters(
+        network, std::vector<double>(network.parameter_count(), 0.0));
+    NeuralExecutionSession session(parameters);
+
+    std::cout << "Ariadne Neural " << neural_version() << '\n'
+              << "Network dimensions: " << network.input_dimension()
+              << " -> " << network.output_dimension() << '\n'
+              << "Parameters: " << network.parameter_count() << '\n'
+              << "Native CPU snapshot import: "
+              << session.supports(NeuralOperation::ImportSnapshot) << '\n'
+              << "Inference available: "
+              << session.supports(NeuralOperation::Inference) << '\n';
     return 0;
 }

@@ -26,5 +26,7 @@
 #define ARIADNE_NEURAL_MODULE_HPP
 
 #include "neural/neural.hpp"
+#include "neural/network.hpp"
+#include "neural/backend.hpp"
 
 #endif // ARIADNE_NEURAL_MODULE_HPP
