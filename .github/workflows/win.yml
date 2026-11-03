@@ -6,9 +6,6 @@ on:
       - main
   pull_request:
 
-env:
-  SCCACHE_GHA_ENABLED: "true"
-
 jobs:
   build-test:
     name: ${{ matrix.config.name }} [${{ matrix.build_type }}]
@@ -33,11 +30,6 @@ jobs:
         with:
           arch: ${{ matrix.config.arch }}
 
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
-        with:
-          version: "v0.18.0"
-
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
@@ -46,13 +38,12 @@ jobs:
         if: matrix.build_type == 'Debug'
         run: python -m pip install pytest
 
+      # Compile with MSVC directly: sccache server startup timed out on Windows CI.
       - name: Configure CMake
         run: |
           # /Z7 avoids concurrent compiler PDB writes in Debug.
           cmake -S . -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache `
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
             -DCMAKE_CXX_FLAGS_DEBUG="/Z7 /Ob0 /Od /RTC1" `
             -DPYTHON_ENFORCE_TESTS=${{ matrix.build_type == 'Debug' && 'ON' || 'OFF' }} `
             -DWARNINGS_AS_ERRORS=ON
@@ -75,7 +66,7 @@ jobs:
         shell: pwsh
         working-directory: ${{ runner.workspace }}/tutorial_neural
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ runner.workspace }}/install" -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ runner.workspace }}/install"
           cmake --build build --parallel
           $env:PATH = "${{ runner.workspace }}\install\bin;$env:PATH"
           & ".\build\tutorial_neural.exe"
