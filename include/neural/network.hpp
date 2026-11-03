@@ -1,5 +1,5 @@
 /***************************************************************************
- *            include/neural/network.hpp
+ *            neural/network.hpp
  *
  *  Copyright  2026  Luca Geretti
  *

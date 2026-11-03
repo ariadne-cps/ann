@@ -1,5 +1,5 @@
 /***************************************************************************
- *            include/neural/backend.hpp
+ *            neural/backend.hpp
  *
  *  Copyright  2026  Luca Geretti
  *
