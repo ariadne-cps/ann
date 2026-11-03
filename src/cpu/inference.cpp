@@ -22,7 +22,7 @@
  *  along with Ariadne Neural.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "cpu/inference.hpp"
+#include "inference.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <utility>
@@ -43,8 +43,8 @@ double activate(NeuralActivation activation, double x) {
         case NeuralActivation::Softplus:
             if (x > 0.0) return x + std::log1p(std::exp(-x));
             else return std::log1p(std::exp(x));
+        default: throw std::invalid_argument("Unknown neural activation");
     }
-    throw std::invalid_argument("Unknown neural activation");
 }
 
 void validate(NeuralNetwork const& network, std::vector<double> const& input) {
