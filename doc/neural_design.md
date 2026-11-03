@@ -642,6 +642,13 @@ calculations; learning-rate, loss reduction, random seeds, exception
 behavior, and deterministic fixed-block reduction policies are tested.
 Thread counts must not change the mathematical API contract.
 
+The global capability query `neural_backend_supports(NativeCpu, Training)`
+is backend-wide and returns true, but the frozen
+`NeuralExecutionSession::supports(Training)` returns false and
+`require(Training)` fails: actual training requests are supported only
+through the separate mutable `NeuralTrainingSession`. This distinction
+is now covered in C++ and Python tests (M4 contract clarification).
+
 **M4 native CPU implementation (2026-11-03):** Implemented sequential
 mini-batch training as a separate `NeuralTrainingSession` that owns its
 working parameter snapshot, first/second optimizer moments, and completed
@@ -819,6 +826,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
+| 2026-11-03 | M4 frozen-session capability contract | Fixed; CI pending | Debug Python CTest on Ubuntu/macOS/Windows exposed two expectations that frozen NeuralExecutionSession rejects Training. M4 had incorrectly made its per-session supports()/require() accept Training merely because backend-wide NativeCpu supports it. Restored the intended distinction: neural_backend_supports(NativeCpu, Training) remains true, while frozen sessions reject Training and only mutable NeuralTrainingSession performs updates. Added both sides of this contract to C++ and Python assertions; no training algorithm, numerical oracle, or coverage removed. |
 | 2026-11-03 | M4 sequential CPU training | Implemented; CI pending | Added separate mutable training workspace, sample-mean MSE and stable BCE with logits, SGD with momentum/coupled decay, AdamW with decoupled decay, deterministic Xavier initialization and shuffled sample indices. C++/Python tests and tutorials cover independent step oracles, convergence, shape errors and frozen snapshot/failed-step invariants. No parallel training, persistence or validation guarantee; rerun platform CI. |
 | 2026-11-03 | Model storage/exchange format decision | Design agreed; not implemented | Selected ONNX for external model portability and versioned JSON manifest + Safetensors for canonical Neural storage. Required binary64-preserving internal round trips, semantic checks for ONNX, clear rejection of unsupported operators/metadata and no mandatory ML runtime. Schema, identity digest, dependencies, parsers, and tests remain M5 implementation work; this change contains no runtime code. |
 | 2026-11-03 | M3 Python CI test oracle | Corrected; CI pending | Python CTest discovery in M3 exposed a pre-existing malformed M1 topology assertion in `python/tests/test_network.py`: the second layer's canonical `biases_offset` is 12 for a 2→3→1 network (weights offset 9, three weights), but the expected tuple omitted that fourth field. Updated only the expected metadata tuple; verified it against the M1 row-major offset formula and reported CI actual output. Model, bindings and semantic coverage unchanged; rerun all CI, especially Python CTest. |

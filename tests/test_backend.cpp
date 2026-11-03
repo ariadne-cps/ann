@@ -69,7 +69,11 @@ public:
         ARIADNE_TESTING_EXPECT_NO_THROW(session.require(NeuralOperation::ImportSnapshot));
         ARIADNE_TESTING_EXPECT_NO_THROW(session.require(NeuralOperation::Inference));
         ARIADNE_TESTING_EXPECT_NO_THROW(session.require(NeuralOperation::BatchInference));
-        ARIADNE_TESTING_EXPECT_NO_THROW(session.require(NeuralOperation::Training));
+        ARIADNE_TESTING_PROVE(neural_backend_supports(
+            NeuralBackendKind::NativeCpu, NeuralOperation::Training));
+        ARIADNE_TESTING_PROVE(!session.supports(NeuralOperation::Training));
+        ARIADNE_TESTING_EXPECT_THROWS(std::logic_error,
+            session.require(NeuralOperation::Training));
         ARIADNE_TESTING_EXPECT_THROWS(std::logic_error,
             session.require(NeuralOperation::ValidatedBounds));
         auto exported = session.export_snapshot();

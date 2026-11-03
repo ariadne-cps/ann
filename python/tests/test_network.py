@@ -69,6 +69,9 @@ def test_model_offsets_and_snapshot():
     assert session.supports(NeuralOperation.BatchInference)
     assert session.export_snapshot().values() == frozen.values()
     session.require(NeuralOperation.Inference)
+    # Training is backend-wide, but is not an operation on a frozen session.
+    assert neural_backend_supports(NeuralBackendKind.NativeCpu, NeuralOperation.Training)
+    assert not session.supports(NeuralOperation.Training)
     with pytest.raises(RuntimeError):
         session.require(NeuralOperation.Training)
 
@@ -144,6 +147,7 @@ def test_m3_affine_derivatives_and_batch():
         network, [2.0, 3.0, -1.0, 4.0, 5.0, 6.0]))
     assert session.supports(NeuralOperation.InputDerivatives)
     assert session.supports(NeuralOperation.ParameterGradients)
+    assert neural_backend_supports(NeuralBackendKind.NativeCpu, NeuralOperation.Training)
     assert not session.supports(NeuralOperation.Training)
     gradient = session.differentiate([1.0, 2.0], [7.0, -2.0])
     assert gradient.input_gradient == [16.0, 13.0]
@@ -184,6 +188,7 @@ def test_m4_sgd_and_adamw_and_snapshot_freezing():
     options.learning_rate = 0.1
     trainer = NeuralTrainingSession(initial, options)
     assert neural_backend_supports(NeuralBackendKind.NativeCpu, NeuralOperation.Training)
+    assert not NeuralExecutionSession(initial).supports(NeuralOperation.Training)
     assert trainer.steps() == 0
     assert trainer.loss_batch([[2.0]], [[0.0]]) == 2.0
     assert trainer.train_batch([[2.0]], [[0.0]]) == 2.0

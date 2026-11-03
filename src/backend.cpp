@@ -71,7 +71,10 @@ NeuralParameterSnapshot NeuralExecutionSession::export_snapshot() const {
     return snapshot_;
 }
 bool NeuralExecutionSession::supports(NeuralOperation operation) const noexcept {
-    return neural_backend_supports(backend_, operation);
+    // Training belongs to the separate mutable NeuralTrainingSession,
+    // not this frozen-snapshot execution session.
+    return operation != NeuralOperation::Training
+        && neural_backend_supports(backend_, operation);
 }
 std::vector<double> NeuralExecutionSession::infer(std::vector<double> const& input) const {
     require(NeuralOperation::Inference);
