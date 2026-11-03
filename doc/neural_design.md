@@ -275,6 +275,60 @@ not a requirement that every runtime stores tensors identically.
   which are supported. ReLU and other nonsmooth activations require
   documented derivative conventions.
 
+### Model exchange and persistence format decision (2026-11-03)
+
+**Status: design agreed, not implemented.** There are two separate
+interfaces with different purposes:
+
+- **Portability: ONNX.** Import/export supported model graphs using the
+  public ONNX specification. Initially support the exact sequential dense
+  topology and activation set actually implemented by Neural, with explicit
+  weight orientation, bias semantics, operator/opset handling, and data type
+  conversion. Unsupported graph constructs or semantically incompatible
+  operators must fail with an informative error, never silently approximate
+  or discard parts of a model. No mandatory ONNX runtime dependency is
+  introduced into the Neural core.
+- **Canonical storage: JSON + Safetensors.** Persist versioned Neural
+  topology, activations, declared numeric representation, tensor
+  names/shapes, semantic conventions, and compatibility metadata in a
+  documented JSON manifest. Store weights and biases in an open
+  Safetensors file, not an executable pickle or a new ad hoc binary
+  container. The manifest schema is an openly documented, versioned
+  *Ariadne-specific* contract; Safetensors by itself does not describe
+  a complete neural-network architecture.
+
+The canonical representation remains
+`NeuralNetwork + NeuralParameterSnapshot`; neither ONNX nodes nor
+Safetensors object types enter the mathematical model or execution APIs.
+For the existing binary64 snapshots, internal round trips must preserve
+each parameter's binary representation, including signed zero, and
+reject mismatched dimensions, unknown versions, missing/duplicate
+tensors, invalid types and malformed metadata. Import/export must
+apply resource limits when parsing untrusted files. Model identity
+and future certificate references should be bound to a well-defined
+canonical topology, activation semantics and exact parameter values;
+the precise schema version and digest construction remain to be specified
+before implementation.
+
+ONNX conversion has a distinct **semantic equivalence** obligation:
+mapping `Gemm`, transpositions, activations and parameter types to Neural
+must be explicit, and ONNX round trips need not preserve arbitrary graph
+layout, execution order or runtime-specific numerical rounding. Importing
+ONNX never, by itself, grants a validated-inference guarantee. Any
+conversion of parameters which changes their values produces a different
+canonical snapshot and must be reported; binary32 inputs are not silently
+relabelled native binary64. Direct loaders for native PyTorch, TensorFlow
+or Keras checkpoints are **not** part of this decision: framework-specific
+conversion can be performed externally.
+
+**Planned order:** formalize the manifest schema and canonical exact
+round-trip tests as part of M5, implement JSON + Safetensors checkpoint
+support, then add ONNX import/export for the supported dense subset
+with independent Python/C++ compatibility fixtures. The choice of
+transport/serialization libraries is deferred until a dependency and
+portability review. These statements describe planned adapters, not
+implemented features.
+
 ### Build and test separation
 
 The current layout keeps public headers directly in `include/neural/` and
@@ -590,7 +644,11 @@ Thread counts must not change the mathematical API contract.
 
 ### M5 — Persistence, freezing, and transfer learning
 
-**Deliverables:** Backend-neutral versioned checkpoint and snapshot format,
+**Deliverables:** Backend-neutral versioned canonical JSON manifest plus
+Safetensors parameter checkpoint, following the agreed open-format decision
+above; ONNX is the separate portable model-exchange interface. Specify exact
+binary64 preservation, schema compatibility and explicit conversion failures.
+Additionally implement the originally planned
 exact topology/activation metadata, typed parameter import/export,
 compatibility checks, frozen parameter groups, replacement of output heads,
 fine-tuning, and clear handling of optional backend-specific optimizer state
@@ -714,6 +772,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
+| 2026-11-03 | Model storage/exchange format decision | Design agreed; not implemented | Selected ONNX for external model portability and versioned JSON manifest + Safetensors for canonical Neural storage. Required binary64-preserving internal round trips, semantic checks for ONNX, clear rejection of unsupported operators/metadata and no mandatory ML runtime. Schema, identity digest, dependencies, parsers, and tests remain M5 implementation work; this change contains no runtime code. |
 | 2026-11-03 | M3 Python CI test oracle | Corrected; CI pending | Python CTest discovery in M3 exposed a pre-existing malformed M1 topology assertion in `python/tests/test_network.py`: the second layer's canonical `biases_offset` is 12 for a 2→3→1 network (weights offset 9, three weights), but the expected tuple omitted that fourth field. Updated only the expected metadata tuple; verified it against the M1 row-major offset formula and reported CI actual output. Model, bindings and semantic coverage unchanged; rerun all CI, especially Python CTest. |
 | 2026-11-03 | Windows CI sccache startup | CI mitigation; verification pending | On Windows x64/MSVC the Debug build failed before compiler execution because sccache timed out starting its server while compiling transitive Utility `command_line_interface.cpp`; this is a compiler-launcher failure, not evidence of a Utility source defect. Disabled sccache only in `.github/workflows/win.yml` for both main build and installed C++ tutorial, allowing direct MSVC compilation. No production code, test assertion, compiler warnings, matrix or dependency pin changed. Validate all four Windows matrix jobs on the new main commit; note possible slower uncached builds. |
 | 2026-11-03 | M3 CPU autodiff | Implemented; CI pending | Native CPU reverse-mode input and canonical parameter gradients, full input Jacobian, batch sum/mean VJP accumulation and ReLU-at-zero subgradient=0; C++ analytic and finite-difference tests, Python tests, tutorial examples, README and Python CTest discovery correction. No training or validated claims; run all platform CI. |
