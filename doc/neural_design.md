@@ -662,6 +662,8 @@ must **not** carry this header.
 | 2026-11-03 | Multi-backend architecture | Design agreed; not implemented | Split canonical model/snapshot, execution backend and high-level operations; plan native CPU, Ariadne validated, optional LibTorch C++ and MLX C++ implementations. M1 must define backend capabilities and data conversion; no runtime API or code added yet. |
 | 2026-11-03 | M1 core implementation | Implemented; CI pending | Added `NeuralNetwork`, `NeuralDenseLayerSpec`, `NeuralDenseLayerLayout`, `NeuralParameterSnapshot`, `NeuralExecutionSession`, backend/operation enums and truthful capability queries. Added C++ `test_network`/`test_backend`, Python `test_network.py`, matching tutorial updates and umbrella headers. No inference, gradients, training, or persistence yet. Validation: positive dimensions, nonempty layers, known activations, overflow-checked weight/bias offsets, finite binary64 parameters, matching array lengths, and rejection of unsupported backends. |
 
+| 2026-11-03 | Testing performance regression | Dependency propagation; CI pending | Updated Testing, Function, and Threading gitlinks after fixing eager operand rendering for successful console assertions. Numeric oracle checks are unchanged; no neural architecture or runtime semantics altered. |
+
 ## Engineering and CI policy
 
 Follow the modular Ariadne layout: `include/neural`, `src`, `tests`,
