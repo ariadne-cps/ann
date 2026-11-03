@@ -189,21 +189,217 @@ Once trained weights are frozen, any mathematically certified property must
 remain tied to that exact model (including architecture and activation
 semantics). A serialized snapshot hash is planned for this purpose.
 
-## Planned implementation stages
+## Implementation roadmap and delivery criteria
 
-1. Establish repository structure, CMake/CI, reproducible submodule pins,
-   installed consumer test, C++ Testing suite, and optional Python bindings.
-2. Define the canonical feed-forward model, activation semantics, serialization,
-   and approximate CPU inference with independent numerical oracles.
-3. Add dense backward propagation, minibatch learning, native optimizers,
-   checkpointing, freezing, and transfer learning.
-4. Add rigorously validated forward/derivative enclosures and constrained
-   parameterizations; test mathematical inclusions rather than only
-   approximate equality.
-5. Expose Function-compatible representations and specialized bounds so
-   Reasoning can use Neural with SMT and dynamic-system verification.
-6. Add optional backend adapters only after the canonical numerical semantics,
-   conversion rules and portability contract have stabilized.
+Development is incremental. Each milestone below should produce a reviewable
+vertical slice: real C++ implementation, focused semantic tests, matching Python
+coverage where a public binding is available, and a usable example in the
+shared `tutorial/` directory. No API should be advertised as implemented
+solely because it appears in this roadmap.
+
+The milestones are **ordered by technical dependency**, not by calendar date.
+Do not start the next milestone with known baseline CI regressions unless
+those failures are understood and explicitly recorded. Cross-platform
+reproducibility is evaluated as a documented contract, not inferred from
+deterministic scheduling alone.
+
+### M0 — Stabilize the repository baseline
+
+**Deliverables:** Diagnose and fix the Linux/GCC coverage job; establish
+stable, reproducible Debug and Release builds, tests, installation, and
+C++/Python tutorial checks. Verify dependency gitlink consistency and the
+five existing CI workflows (Ubuntu, macOS, Windows, sanitizers, coverage).
+
+**Acceptance:** All required CI jobs pass at one revision; the fix does not
+weaken test assertions, suppress relevant instrumentation, or mask real
+failures. Existing bootstrap APIs and the shared `tutorial/` layout remain
+unchanged.
+
+**Initial observation (2026-11-03):** On earlier completed runs, the
+Ubuntu, macOS, Windows, and sanitizer workflows passed. The coverage
+workflow failed in its Ubuntu/GCC job during the build/test/coverage
+generation step, while its macOS job passed. Root cause has **not yet**
+been established. Treat this as an open investigation, not as a diagnosed
+code defect.
+
+### M1 — Canonical model and parameter invariants
+
+**Deliverables:** Define the sequential dense feed-forward architecture,
+activation descriptors, tensor/matrix shapes and storage order, weights,
+biases, immutable snapshot semantics, and explicit validation of network
+dimensions. Specify whether numeric representation is part of the model
+or its executor, and distinguish a mathematical model from a concrete
+floating-point execution.
+
+**Acceptance:** Construct and inspect networks from C++ and Python with
+identical layer and parameter metadata. Reject invalid shapes and
+nonrepresentable configurations without silent truncation. Define empty
+network and zero-dimensional cases explicitly rather than accidentally.
+No general-purpose tensor/autograd engine.
+
+### M2 — Reference CPU inference
+
+**Deliverables:** Implement one-sample and batched dense forward evaluation
+using dedicated kernels and stable elementary activations: identity,
+tanh, sigmoid, ReLU, and softplus. Add a sequential reference evaluator
+and define non-finite input/parameter policies, dimension checks,
+storage orientation, and numerical comparison rules.
+
+**Acceptance:** Independently calculated small-network examples agree
+within explicitly justified approximate tolerances; identity and
+single-layer affine cases agree with analytic results; consistent
+inference is exposed through C++ and Python and demonstrated in both
+`tutorial_neural.cpp` and `tutorial_neural.py`.
+
+### M3 — Derivatives and backpropagation
+
+**Deliverables:** Implement layerwise reverse-mode derivatives with
+respect to inputs and to trainable weights/biases, plus per-batch gradient
+accumulation. Differentiate losses from activations, parameter storage,
+and optimizer state. Define the ReLU kink policy for approximate training;
+never present this convention as a classical derivative valid at zero.
+
+**Acceptance:** Analytical cases and independent centered finite
+differences agree away from nonsmooth points; gradient shapes, scaling
+(sum versus mean), bias accumulation, and input Jacobians are tested.
+Do not use finite differences themselves as a formal guarantee.
+
+### M4 — Native training and optimizers
+
+**Deliverables:** Add training datasets/batches, reproducible initialization
+and shuffling, MSE and at least one classification loss, SGD (with
+optional momentum), and AdamW; extend with Adam, Huber, and other losses
+when semantics and tests are established. Introduce Threading-based
+mini-batch execution after a correct sequential implementation exists.
+
+**Acceptance:** Convergence is exercised on deterministic small regression
+and classification tasks; optimizer update steps match independent
+calculations; learning-rate, loss reduction, random seeds, exception
+behavior, and deterministic fixed-block reduction policies are tested.
+Thread counts must not change the mathematical API contract.
+
+### M5 — Persistence, freezing, and transfer learning
+
+**Deliverables:** Versioned checkpoint format, exact topology/activation
+metadata, parameter load/save and compatibility checks, frozen
+parameter groups, replacement of output heads, fine-tuning, and clear
+handling of optimizer state and reproducible model identity.
+
+**Acceptance:** Round trips preserve serialized parameter values and
+semantics as specified; intentional incompatible loads fail explicitly;
+frozen weights do not change after optimizer steps; both language
+tutorials demonstrate a small fine-tuning workflow. A certificate
+attached to a snapshot must be invalidated by relevant changes.
+
+### M6 — Validated inference and numerical enclosures
+
+**Deliverables:** Rigorous input-box output enclosures via interval bound
+propagation using Ariadne's directed-rounding/validated numeric facilities.
+Extend to derivative enclosures and tighter affine/Taylor propagation
+only after basic inclusions work. Make exact model parameters and their
+conversion into validation arithmetic explicit.
+
+**Acceptance:** Bounds are tested against analytic corner cases and
+independent enclosure oracles, including cancellation and activation
+extrema. Sampling is an additional falsification technique, not a proof.
+No floating-point approximate result may be silently relabeled
+validated. Document domain, parameter, rounding, and backend assumptions.
+
+### M7 — Structural constraints and construction guarantees
+
+**Deliverables:** Constraints such as nonnegative weights and bounded
+parameters, monotone subnetworks with explicit activation conditions,
+conservative Lipschitz certificates, and selected bounded-output
+parameterizations. Begin with transformations that preserve feasibility
+at every optimizer update; add more general constrained learning only
+when justified by an actual use case.
+
+**Acceptance:** Each construction has a mathematical statement of the
+property, documented hypotheses and domain, direct invariant tests
+across initialization/training/checkpoint transfer, and no reliance on
+soft loss penalties as a proof. Generic LP/NLP dependencies are not
+introduced without an explicit design and dependency-DAG review.
+
+### M8 — Function interoperability and Reasoning readiness
+
+**Deliverables:** A Function-compatible view of frozen networks and,
+where appropriate, specialized numerical bounds and input derivatives.
+Prove API boundaries and smoothness expectations rather than assuming
+that every activation is differentiable. Provide a standalone
+composition example that does not make Neural depend on Reasoning, SMT,
+System, or Evolution.
+
+**Acceptance:** Small smooth networks yield consistent native,
+Function-based, and validated evaluations. Record exact conversion
+semantics and performance costs. The existing Barr3 fixture is a
+follow-on integration/performance benchmark for Reasoning or SMT;
+an `UNKNOWN` solver result is not an accepted certificate.
+
+### M9 — Performance and optional backends
+
+**Deliverables:** Profile and improve CPU kernels and batching without
+changing the canonical model; compare supported worker counts and
+approximate/validated evaluation costs. Consider external LibTorch/MLX
+adapters only behind optional targets or separate integration layers.
+
+**Acceptance:** Benchmarks report workload, precision, hardware, baseline,
+error tolerance, and numerical equivalence criteria. No mandatory new
+machine-learning dependency; accelerated inference must not inherit
+validation claims without separate error analysis or certification.
+
+### Milestone implementation order
+
+```text
+M0 baseline CI
+  -> M1 model
+  -> M2 CPU forward
+  -> M3 derivatives
+  -> M4 training
+  -> M5 persistence / transfer
+  -> M6 validated enclosures
+  -> M7 structural guarantees
+  -> M8 Function interoperability / Reasoning readiness
+  -> M9 optional optimization / backends
+```
+
+Some interfaces (especially numeric semantics, parameter freezing, and the
+Function adapter) may need small proof-of-concept tests in an earlier
+milestone to detect architectural incompatibilities. Such experiments
+must remain bounded and their results must be recorded here; they do
+not change the committed dependency direction.
+
+## Implementation documentation discipline
+
+**Mandatory for every implementation increment:** Modify
+`doc/neural_design.md` **in the same commit or pull request as the
+implementation**, not in a later undocumented follow-up. Keep this
+document as the design journal and living contract. Each increment
+must add or update an entry in the implementation log below covering:
+
+- **Scope and status:** milestone ID, implementation completed, and public
+  API changes, including any explicit deviations from the original plan.
+- **Design decisions:** mathematical model, data representation,
+  numerical assumptions, precision, rounding, concurrency, and relevant
+  trade-offs. Record rejected alternatives when they affect later work.
+- **Tests and evidence:** exact new or changed tests and reproducible
+  commands. Note CI success, failures, or checks still pending truthfully.
+- **Limitations and next step:** known edge cases, unsupported features,
+  remaining proof obligations, and what is required before proceeding.
+
+Update the existing design sections whenever an implemented choice
+supersedes a proposed one. Mark claims as **planned**, **implemented**,
+**tested**, or **formally established** as appropriate; test success and
+sample checks alone are not mathematical proof. C++ and Python source files
+must carry the standard Ariadne Neural copyright/GPL header; CMake files
+must **not** carry this header.
+
+### Implementation log
+
+| Date (UTC) | Milestone | Status | Changes, evidence, limitations |
+| --- | --- | --- | --- |
+| 2026-11-03 | Bootstrap | Implemented (CI under observation) | Project skeleton, pinned Configuration/Testing/Function/Threading, source and binding smoke tests, shared `tutorial/` directory, CI workflows. No neural model or training implementation. |
+| 2026-11-03 | M0 | Planned / investigation open | Linux/GCC coverage job fails in completed earlier runs; macOS coverage passes. Establish root cause and fix before M1. |
+| 2026-11-03 | Planning | Recorded | Milestones M0–M9 and mandatory per-implementation design-log update policy established; no new runtime functionality in this change. |
 
 ## Engineering and CI policy
 
