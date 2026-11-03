@@ -49,7 +49,8 @@ bool neural_backend_supports(
             || operation == NeuralOperation::Inference
             || operation == NeuralOperation::BatchInference
             || operation == NeuralOperation::InputDerivatives
-            || operation == NeuralOperation::ParameterGradients);
+            || operation == NeuralOperation::ParameterGradients
+            || operation == NeuralOperation::Training);
 }
 
 NeuralExecutionSession::NeuralExecutionSession(

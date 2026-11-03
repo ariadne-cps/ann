@@ -69,7 +69,8 @@ bool neural_backend_available(NeuralBackendKind backend) noexcept;
  *
  *  An unavailable backend supports no operations. NativeCpu supports
  *  ImportSnapshot, Inference, BatchInference, InputDerivatives and
- *  ParameterGradients in M3.
+ *  ParameterGradients and Training in M4. Training is performed by a
+ *  separate mutable NeuralTrainingSession, never by this frozen session.
  */
 bool neural_backend_supports(NeuralBackendKind backend, NeuralOperation operation) noexcept;
 
@@ -77,7 +78,8 @@ bool neural_backend_supports(NeuralBackendKind backend, NeuralOperation operatio
  *
  *  The session takes ownership of a snapshot copy or move and exposes no
  *  mutable access to its parameters. CPU inference and reverse-mode
- *  derivatives are available; training and validation remain unsupported.
+ *  derivatives are available. The separate NeuralTrainingSession performs
+ *  NativeCpu training; validated bounds remain unsupported.
  */
 class NeuralExecutionSession {
 public:

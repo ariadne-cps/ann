@@ -642,6 +642,53 @@ calculations; learning-rate, loss reduction, random seeds, exception
 behavior, and deterministic fixed-block reduction policies are tested.
 Thread counts must not change the mathematical API contract.
 
+**M4 native CPU implementation (2026-11-03):** Implemented sequential
+mini-batch training as a separate `NeuralTrainingSession` that owns its
+working parameter snapshot, first/second optimizer moments, and completed
+step count. `NeuralExecutionSession` remains a frozen inference/derivatives
+view. Training imports and exports independent immutable
+`NeuralParameterSnapshot` instances; failed validation or arithmetic does
+not commit parameters, moments, or step count. No dataset pointers or
+mutable references are exported. The `NeuralOperation::Training` capability
+now reflects the native CPU training implementation; other backends still
+advertise no training.
+
+`MeanSquaredError` evaluates `0.5 * sum_o (y_o - t_o)^2` per sample.
+`BinaryCrossEntropyWithLogits` uses a numerically stable softplus
+decomposition with independent binary targets in [0,1], requires
+an Identity output activation, and has output cotangent
+`sigmoid(logit) - target`. All batches are nonempty, have matching
+input/target row counts and fixed input/output dimensions, and reject
+nonfinite inputs and targets. Losses and gradients are **mean-reduced over
+samples only**, not over output components. The existing M3 VJP provides
+the layerwise parameter gradients. CPU accumulation is deliberately
+sequential; no Threading-based parallel reductions are yet added.
+
+SGD uses a classical momentum buffer `v = momentum*v + (g + wd*p)`,
+followed by `p -= lr*v`; its weight decay is coupled L2, including
+biases. AdamW uses standard first and second moments with power-based
+bias correction and epsilon **outside** the square root:
+`p = p*(1 - lr*wd) - lr*mhat/(sqrt(vhat) + epsilon)`; its decay is
+decoupled and also applies to all parameters, including biases.
+All optimizer hyperparameters are checked; arithmetic overflow fails
+explicitly. `neural_initialize_parameters` generates Xavier-uniform
+weights with zero biases from a fixed SplitMix64 generator; and
+`neural_shuffled_indices` provides a reproducible Fisher-Yates order
+with rejection sampling to avoid modulo bias. These are deterministic
+given the same C++ implementation and seed, not a guarantee of
+cross-platform bit-identical transcendental results.
+
+Added focused C++ `tests/test_training.cpp` with analytic optimizer
+step oracles, batch mean scaling, small regression/classification
+convergence, initialization/shuffling reproducibility, and atomic failure
+checks. Python tests exercise the same public contracts; both tutorials
+demonstrate native training. Supported features are present in C++ and
+the `pyariadne` binding. Full cross-platform CI remains the acceptance
+gate; performance, parallel batch execution, persistence/transfer
+learning, and validated training guarantees remain outside M4.
+No serialization format is implemented: the agreed M5 storage plan
+remains versioned JSON plus Safetensors and ONNX for portability.
+
 ### M5 — Persistence, freezing, and transfer learning
 
 **Deliverables:** Backend-neutral versioned canonical JSON manifest plus
@@ -772,6 +819,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
+| 2026-11-03 | M4 sequential CPU training | Implemented; CI pending | Added separate mutable training workspace, sample-mean MSE and stable BCE with logits, SGD with momentum/coupled decay, AdamW with decoupled decay, deterministic Xavier initialization and shuffled sample indices. C++/Python tests and tutorials cover independent step oracles, convergence, shape errors and frozen snapshot/failed-step invariants. No parallel training, persistence or validation guarantee; rerun platform CI. |
 | 2026-11-03 | Model storage/exchange format decision | Design agreed; not implemented | Selected ONNX for external model portability and versioned JSON manifest + Safetensors for canonical Neural storage. Required binary64-preserving internal round trips, semantic checks for ONNX, clear rejection of unsupported operators/metadata and no mandatory ML runtime. Schema, identity digest, dependencies, parsers, and tests remain M5 implementation work; this change contains no runtime code. |
 | 2026-11-03 | M3 Python CI test oracle | Corrected; CI pending | Python CTest discovery in M3 exposed a pre-existing malformed M1 topology assertion in `python/tests/test_network.py`: the second layer's canonical `biases_offset` is 12 for a 2→3→1 network (weights offset 9, three weights), but the expected tuple omitted that fourth field. Updated only the expected metadata tuple; verified it against the M1 row-major offset formula and reported CI actual output. Model, bindings and semantic coverage unchanged; rerun all CI, especially Python CTest. |
 | 2026-11-03 | Windows CI sccache startup | CI mitigation; verification pending | On Windows x64/MSVC the Debug build failed before compiler execution because sccache timed out starting its server while compiling transitive Utility `command_line_interface.cpp`; this is a compiler-launcher failure, not evidence of a Utility source defect. Disabled sccache only in `.github/workflows/win.yml` for both main build and installed C++ tutorial, allowing direct MSVC compilation. No production code, test assertion, compiler warnings, matrix or dependency pin changed. Validate all four Windows matrix jobs on the new main commit; note possible slower uncached builds. |

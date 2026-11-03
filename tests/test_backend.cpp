@@ -48,11 +48,11 @@ public:
             NeuralBackendKind::NativeCpu, NeuralOperation::ImportSnapshot));
         for (auto op : {NeuralOperation::Inference, NeuralOperation::BatchInference,
                         NeuralOperation::InputDerivatives,
-                        NeuralOperation::ParameterGradients}) {
+                        NeuralOperation::ParameterGradients,
+                        NeuralOperation::Training}) {
             ARIADNE_TESTING_PROVE(neural_backend_supports(NeuralBackendKind::NativeCpu, op));
         }
-        for (auto op : {NeuralOperation::Training,
-                        NeuralOperation::ValidatedBounds}) {
+        for (auto op : {NeuralOperation::ValidatedBounds}) {
             ARIADNE_TESTING_PROVE(!neural_backend_supports(NeuralBackendKind::NativeCpu, op));
         }
         ARIADNE_TESTING_PROVE(!neural_backend_available(static_cast<NeuralBackendKind>(42)));
@@ -69,8 +69,7 @@ public:
         ARIADNE_TESTING_EXPECT_NO_THROW(session.require(NeuralOperation::ImportSnapshot));
         ARIADNE_TESTING_EXPECT_NO_THROW(session.require(NeuralOperation::Inference));
         ARIADNE_TESTING_EXPECT_NO_THROW(session.require(NeuralOperation::BatchInference));
-        ARIADNE_TESTING_EXPECT_THROWS(std::logic_error,
-            session.require(NeuralOperation::Training));
+        ARIADNE_TESTING_EXPECT_NO_THROW(session.require(NeuralOperation::Training));
         ARIADNE_TESTING_EXPECT_THROWS(std::logic_error,
             session.require(NeuralOperation::ValidatedBounds));
         auto exported = session.export_snapshot();

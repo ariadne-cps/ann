@@ -26,6 +26,8 @@ from pyariadne import (
     NeuralActivation,
     NeuralDenseLayerSpec,
     NeuralExecutionSession,
+    NeuralOptimizerOptions,
+    NeuralTrainingSession,
     NeuralNetwork,
     NeuralOperation,
     NeuralParameterSnapshot,
@@ -47,3 +49,11 @@ if __name__ == "__main__":
     print('Single inference:', session.infer([3.0, 1.0]))
     print('Batch inference:', session.infer_batch([[3.0, 1.0], [1.0, 4.0]]))
     print("Output gradient:", session.differentiate([3.0, 1.0], [1.0]).input_gradient)
+
+    regression = NeuralNetwork(1, [NeuralDenseLayerSpec(1, NeuralActivation.Identity)])
+    optimizer = NeuralOptimizerOptions()
+    optimizer.learning_rate = 0.1
+    trainer = NeuralTrainingSession(NeuralParameterSnapshot(regression, [0.0, 0.0]), optimizer)
+    for _ in range(70):
+        trainer.train_batch([[1.0]], [[2.0]])
+    print("Training steps:", trainer.steps(), "final MSE:", trainer.loss_batch([[1.0]], [[2.0]]))

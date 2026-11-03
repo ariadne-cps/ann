@@ -31,6 +31,12 @@ from pyariadne import (
     NeuralDenseLayerSpec,
     NeuralExecutionSession,
     NeuralGradientReduction,
+    NeuralLossKind,
+    NeuralOptimizerKind,
+    NeuralOptimizerOptions,
+    NeuralTrainingSession,
+    neural_initialize_parameters,
+    neural_shuffled_indices,
     NeuralNetwork,
     NeuralOperation,
     NeuralParameterSnapshot,
@@ -167,3 +173,69 @@ def test_m3_relu_at_kink_and_snapshot():
     assert gradient.input_gradient == [0.0]
     assert gradient.parameter_gradient == [0.0, 0.0]
     assert session.export_snapshot().values() == [1.0, 0.0]
+
+
+
+def test_m4_sgd_and_adamw_and_snapshot_freezing():
+    model = NeuralNetwork(1, [NeuralDenseLayerSpec(1, NeuralActivation.Identity)])
+    initial = NeuralParameterSnapshot(model, [1.0, 0.0])
+    options = NeuralOptimizerOptions()
+    options.kind = NeuralOptimizerKind.Sgd
+    options.learning_rate = 0.1
+    trainer = NeuralTrainingSession(initial, options)
+    assert neural_backend_supports(NeuralBackendKind.NativeCpu, NeuralOperation.Training)
+    assert trainer.steps() == 0
+    assert trainer.loss_batch([[2.0]], [[0.0]]) == 2.0
+    assert trainer.train_batch([[2.0]], [[0.0]]) == 2.0
+    assert all(math.isclose(x, y, rel_tol=0, abs_tol=1e-12)
+               for x, y in zip(trainer.export_snapshot().values(), [0.6, -0.2]))
+    assert initial.values() == [1.0, 0.0]
+    assert trainer.steps() == 1
+
+    options.kind = NeuralOptimizerKind.AdamW
+    options.beta1 = 0.0
+    options.beta2 = 0.0
+    options.epsilon = 1.0
+    options.weight_decay = 0.1
+    adamw = NeuralTrainingSession(initial, options)
+    adamw.train_batch([[2.0]], [[0.0]])
+    assert all(math.isclose(x, y, rel_tol=0, abs_tol=1e-12)
+               for x, y in zip(adamw.export_snapshot().values(),
+                               [0.91, -0.1 * 2.0 / 3.0]))
+
+
+def test_m4_binary_classification_and_determinism():
+    model = NeuralNetwork(1, [NeuralDenseLayerSpec(1, NeuralActivation.Identity)])
+    options = NeuralOptimizerOptions()
+    options.learning_rate = 0.2
+    trainer = NeuralTrainingSession(
+        NeuralParameterSnapshot(model, [0.0, 0.0]), options,
+        NeuralLossKind.BinaryCrossEntropyWithLogits)
+    samples, labels = [[1.0], [-1.0]], [[1.0], [0.0]]
+    assert math.isclose(trainer.loss_batch(samples, labels), math.log(2.0), abs_tol=1e-12)
+    for _ in range(80):
+        trainer.train_batch(samples, labels)
+    assert trainer.loss_batch(samples, labels) < 0.1
+    first = neural_initialize_parameters(model, 123456)
+    second = neural_initialize_parameters(model, 123456)
+    assert first.values() == second.values()
+    order = neural_shuffled_indices(32, 7)
+    assert order == neural_shuffled_indices(32, 7)
+    assert sorted(order) == list(range(32))
+
+
+def test_m4_failure_atomicity():
+    model = NeuralNetwork(1, [NeuralDenseLayerSpec(1, NeuralActivation.Identity)])
+    options = NeuralOptimizerOptions()
+    trainer = NeuralTrainingSession(NeuralParameterSnapshot(model, [1.0, 0.0]), options)
+    with pytest.raises(ValueError):
+        trainer.train_batch([], [])
+    with pytest.raises(ValueError):
+        trainer.train_batch([[1.0]], [[math.inf]])
+    with pytest.raises(ValueError):
+        trainer.train_batch([[1.0]], [[1.0, 2.0]])
+    assert trainer.steps() == 0
+    assert trainer.export_snapshot().values() == [1.0, 0.0]
+    options.learning_rate = 0.0
+    with pytest.raises(ValueError):
+        NeuralTrainingSession(NeuralParameterSnapshot(model, [1.0, 0.0]), options)

@@ -5,6 +5,7 @@ set(UNIT_TESTS
     test_network
     test_backend
     test_derivatives
+    test_training
     test_umbrella
 )
 

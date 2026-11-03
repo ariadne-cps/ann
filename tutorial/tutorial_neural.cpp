@@ -47,5 +47,16 @@ int main() {
               << "Batch inference: " << session.infer_batch({{3.0, 1.0}, {1.0, 4.0}}).at(1).at(0) << '\n'
               << "Input derivative of sum of outputs: "
               << session.differentiate({3.0, 1.0}, {1.0}).input_gradient.at(0) << '\n';
+
+    NeuralOptimizerOptions optimizer;
+    optimizer.learning_rate = 0.1;
+    NeuralNetwork regression(1, {{1, NeuralActivation::Identity}});
+    NeuralParameterSnapshot regression_start(regression, {0.0, 0.0});
+    NeuralTrainingSession trainer(regression_start, optimizer);
+    for (int step = 0; step < 70; ++step) {
+        (void)trainer.train_batch({{1.0}}, {{2.0}});
+    }
+    std::cout << "Training steps: " << trainer.steps()
+              << " | final MSE: " << trainer.loss_batch({{1.0}}, {{2.0}}) << '\n';
     return 0;
 }

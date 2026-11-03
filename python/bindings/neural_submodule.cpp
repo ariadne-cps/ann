@@ -27,6 +27,7 @@
 #include "neural/neural.hpp"
 #include "neural/network.hpp"
 #include "neural/backend.hpp"
+#include "neural/training.hpp"
 
 #include <cstddef>
 #include <vector>
@@ -99,6 +100,40 @@ void neural_submodule(pybind11::module& module) {
     pybind11::class_<NeuralBatchGradientResult>(module, "NeuralBatchGradientResult")
         .def_readonly("input_gradients", &NeuralBatchGradientResult::input_gradients)
         .def_readonly("parameter_gradient", &NeuralBatchGradientResult::parameter_gradient);
+
+    pybind11::enum_<NeuralLossKind>(module, "NeuralLossKind")
+        .value("MeanSquaredError", NeuralLossKind::MeanSquaredError)
+        .value("BinaryCrossEntropyWithLogits", NeuralLossKind::BinaryCrossEntropyWithLogits);
+
+    pybind11::enum_<NeuralOptimizerKind>(module, "NeuralOptimizerKind")
+        .value("Sgd", NeuralOptimizerKind::Sgd)
+        .value("AdamW", NeuralOptimizerKind::AdamW);
+
+    pybind11::class_<NeuralOptimizerOptions>(module, "NeuralOptimizerOptions")
+        .def(pybind11::init<>())
+        .def_readwrite("kind", &NeuralOptimizerOptions::kind)
+        .def_readwrite("learning_rate", &NeuralOptimizerOptions::learning_rate)
+        .def_readwrite("momentum", &NeuralOptimizerOptions::momentum)
+        .def_readwrite("weight_decay", &NeuralOptimizerOptions::weight_decay)
+        .def_readwrite("beta1", &NeuralOptimizerOptions::beta1)
+        .def_readwrite("beta2", &NeuralOptimizerOptions::beta2)
+        .def_readwrite("epsilon", &NeuralOptimizerOptions::epsilon);
+
+    pybind11::class_<NeuralTrainingSession>(module, "NeuralTrainingSession")
+        .def(pybind11::init<NeuralParameterSnapshot, NeuralOptimizerOptions, NeuralLossKind>(),
+             pybind11::arg("initial"), pybind11::arg("options"),
+             pybind11::arg("loss") = NeuralLossKind::MeanSquaredError)
+        .def("steps", &NeuralTrainingSession::steps)
+        .def("export_snapshot", &NeuralTrainingSession::export_snapshot)
+        .def("loss_batch", &NeuralTrainingSession::loss_batch,
+             pybind11::arg("inputs"), pybind11::arg("targets"))
+        .def("train_batch", &NeuralTrainingSession::train_batch,
+             pybind11::arg("inputs"), pybind11::arg("targets"));
+
+    module.def("neural_initialize_parameters", &neural_initialize_parameters,
+               pybind11::arg("network"), pybind11::arg("seed"));
+    module.def("neural_shuffled_indices", &neural_shuffled_indices,
+               pybind11::arg("count"), pybind11::arg("seed"));
 
     module.def("neural_backend_available", &neural_backend_available,
                pybind11::arg("backend"));
