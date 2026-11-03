@@ -100,6 +100,8 @@ void neural_submodule(pybind11::module& module) {
         .def("backend", &NeuralExecutionSession::backend)
         .def("snapshot", &NeuralExecutionSession::export_snapshot)
         .def("export_snapshot", &NeuralExecutionSession::export_snapshot)
+        .def("infer", &NeuralExecutionSession::infer, pybind11::arg("input"))
+        .def("infer_batch", &NeuralExecutionSession::infer_batch, pybind11::arg("inputs"))
         .def("supports", &NeuralExecutionSession::supports)
         .def("require", &NeuralExecutionSession::require);
 }

@@ -58,10 +58,12 @@ def test_model_offsets_and_snapshot():
     session = NeuralExecutionSession(frozen)
     assert session.backend() == NeuralBackendKind.NativeCpu
     assert session.supports(NeuralOperation.ImportSnapshot)
-    assert not session.supports(NeuralOperation.Inference)
+    assert session.supports(NeuralOperation.Inference)
+    assert session.supports(NeuralOperation.BatchInference)
     assert session.export_snapshot().values() == frozen.values()
+    session.require(NeuralOperation.Inference)
     with pytest.raises(RuntimeError):
-        session.require(NeuralOperation.Inference)
+        session.require(NeuralOperation.Training)
 
 
 def test_invalid_shapes_and_parameters():
@@ -94,3 +96,36 @@ def test_backend_capability_rejection():
                     NeuralNetwork(1, [NeuralDenseLayerSpec(1, NeuralActivation.Identity)]),
                     [1.0, 0.0]),
                 kind)
+
+
+def test_cpu_inference_and_batch():
+    network = NeuralNetwork(2, [NeuralDenseLayerSpec(2, NeuralActivation.Relu),
+                                NeuralDenseLayerSpec(1, NeuralActivation.Identity)])
+    session = NeuralExecutionSession(NeuralParameterSnapshot(
+        network, [1.0, -1.0, -1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0]))
+    assert session.infer([3, 1]) == [2.0]
+    assert session.infer_batch([[3, 1], [1, 4]]) == [[2.0], [3.0]]
+    assert session.infer_batch([]) == []
+    with pytest.raises(ValueError):
+        session.infer([1.0])
+    with pytest.raises(ValueError):
+        session.infer_batch([[1.0, 2.0], [math.inf, 2.0]])
+    assert session.export_snapshot().values()[0] == 1.0
+
+
+def test_stable_cpu_activations():
+    for activation in (NeuralActivation.Sigmoid, NeuralActivation.Softplus,
+                       NeuralActivation.Tanh):
+        session = NeuralExecutionSession(NeuralParameterSnapshot(
+            NeuralNetwork(1, [NeuralDenseLayerSpec(1, activation)]), [1.0, 0.0]))
+        negative, positive = session.infer([-1000])[0], session.infer([1000])[0]
+        assert math.isfinite(negative) and math.isfinite(positive)
+        if activation == NeuralActivation.Sigmoid:
+            assert (negative, positive) == (0.0, 1.0)
+        if activation == NeuralActivation.Softplus:
+            assert (negative, positive) == (0.0, 1000.0)
+    overflow = NeuralExecutionSession(NeuralParameterSnapshot(
+        NeuralNetwork(1, [NeuralDenseLayerSpec(1, NeuralActivation.Identity)]),
+        [1e308, 0.0]))
+    with pytest.raises(OverflowError):
+        overflow.infer([1e308])

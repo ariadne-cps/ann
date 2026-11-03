@@ -23,6 +23,7 @@
  */
 
 #include "neural/backend.hpp"
+#include "cpu/inference.hpp"
 
 #include <stdexcept>
 #include <utility>
@@ -44,7 +45,9 @@ bool neural_backend_available(NeuralBackendKind backend) noexcept {
 bool neural_backend_supports(
     NeuralBackendKind backend, NeuralOperation operation) noexcept {
     return neural_backend_available(backend)
-        && operation == NeuralOperation::ImportSnapshot;
+        && (operation == NeuralOperation::ImportSnapshot
+            || operation == NeuralOperation::Inference
+            || operation == NeuralOperation::BatchInference);
 }
 
 NeuralExecutionSession::NeuralExecutionSession(
@@ -66,6 +69,15 @@ NeuralParameterSnapshot NeuralExecutionSession::export_snapshot() const {
 }
 bool NeuralExecutionSession::supports(NeuralOperation operation) const noexcept {
     return neural_backend_supports(backend_, operation);
+}
+std::vector<double> NeuralExecutionSession::infer(std::vector<double> const& input) const {
+    require(NeuralOperation::Inference);
+    return NeuralCpu::infer(snapshot_, input);
+}
+std::vector<std::vector<double>> NeuralExecutionSession::infer_batch(
+    std::vector<std::vector<double>> const& inputs) const {
+    require(NeuralOperation::BatchInference);
+    return NeuralCpu::infer_batch(snapshot_, inputs);
 }
 void NeuralExecutionSession::require(NeuralOperation operation) const {
     if (!supports(operation)) {

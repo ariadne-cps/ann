@@ -6,9 +6,9 @@ evaluation within Ariadne. It is intended to be portable, CPU-first, and free
 from mandatory third-party machine-learning runtimes. Future optional backends
 may support LibTorch and MLX.
 
-**Status:** The M1 canonical dense-network topology, frozen binary64
-parameter snapshots and native-CPU snapshot import contract are implemented.
-Inference, gradients, training and formal certification are **not** implemented.
+**Status:** M1 canonical topology, frozen binary64 snapshots and backend contracts,
+and M2 native-CPU one-sample and batched reference inference are implemented.
+Gradients, training and formal certification are **not** implemented.
 See [doc/neural_design.md](doc/neural_design.md) for the design and roadmap.
 
 ## Dependencies
@@ -62,7 +62,8 @@ cmake --install build-release --prefix /path/to/install
 Optional Python bindings require Python 3.11+ with development headers;
 set `-DBUILD_PYTHON_BINDINGS=OFF` to omit them. When enabled, the bindings
 are composed into a single `pyariadne` module like the other Ariadne
-components. The initial smoke binding exposes `neural_version()`.
+components. Python bindings expose M2 CPU `infer()` and `infer_batch()` as well as
+`neural_version()`.
 
 ## License
 

@@ -29,10 +29,10 @@
 
 int main() {
     using namespace Ariadne;
-    NeuralNetwork network(2, {{3, NeuralActivation::Tanh},
+    NeuralNetwork network(2, {{2, NeuralActivation::Relu},
                               {1, NeuralActivation::Identity}});
     NeuralParameterSnapshot parameters(
-        network, std::vector<double>(network.parameter_count(), 0.0));
+        network, {1.0, -1.0, -1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0});
     NeuralExecutionSession session(parameters);
 
     std::cout << "Ariadne Neural " << neural_version() << '\n'
@@ -42,6 +42,8 @@ int main() {
               << "Native CPU snapshot import: "
               << session.supports(NeuralOperation::ImportSnapshot) << '\n'
               << "Inference available: "
-              << session.supports(NeuralOperation::Inference) << '\n';
+              << session.supports(NeuralOperation::Inference) << '\n'
+              << "Single inference: " << session.infer({3.0, 1.0}).at(0) << '\n'
+              << "Batch inference: " << session.infer_batch({{3.0, 1.0}, {1.0, 4.0}}).at(1).at(0) << '\n';
     return 0;
 }

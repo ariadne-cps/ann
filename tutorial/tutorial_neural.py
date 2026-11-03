@@ -20,7 +20,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Ariadne Neural.  If not, see <https://www.gnu.org/licenses/>.
 
-"""M1 canonical model and available backend capabilities (no inference yet)."""
+"""M2 canonical model and reference CPU inference."""
 
 from pyariadne import (
     NeuralActivation,
@@ -34,13 +34,15 @@ from pyariadne import (
 
 if __name__ == "__main__":
     model = NeuralNetwork(2, [
-        NeuralDenseLayerSpec(3, NeuralActivation.Tanh),
+        NeuralDenseLayerSpec(2, NeuralActivation.Relu),
         NeuralDenseLayerSpec(1, NeuralActivation.Identity),
     ])
-    snapshot = NeuralParameterSnapshot(model, [0.0] * model.parameter_count())
+    snapshot = NeuralParameterSnapshot(model, [1, -1, -1, 1, 0, 0, 1, 1, 0])
     session = NeuralExecutionSession(snapshot)
     print("Ariadne Neural", neural_version())
     print("Network dimensions:", model.input_dimension(), "->", model.output_dimension())
     print("Parameters:", model.parameter_count())
     print("Native CPU snapshot import:", session.supports(NeuralOperation.ImportSnapshot))
     print("Inference available:", session.supports(NeuralOperation.Inference))
+    print('Single inference:', session.infer([3.0, 1.0]))
+    print('Batch inference:', session.infer_batch([[3.0, 1.0], [1.0, 4.0]]))

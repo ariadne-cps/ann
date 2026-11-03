@@ -60,23 +60,22 @@ enum class NeuralOperation {
 
 /** @brief Whether a backend implementation is actually compiled and usable.
  *
- *  In M1 only NativeCpu is available, solely for canonical snapshot import.
+ *  NativeCpu supports snapshot import and approximate single/batch inference.
  */
 bool neural_backend_available(NeuralBackendKind backend) noexcept;
 
 /** @brief Whether a backend implements a particular operation.
  *
- *  An unavailable backend supports no operations. In M1 NativeCpu supports
- *  only ImportSnapshot; inference is intentionally deferred to M2.
+ *  An unavailable backend supports no operations. NativeCpu supports
+ *  ImportSnapshot, Inference, and BatchInference in M2.
  */
 bool neural_backend_supports(NeuralBackendKind backend, NeuralOperation operation) noexcept;
 
 /** @brief A backend-selection and frozen-snapshot import boundary.
  *
  *  The session takes ownership of a snapshot copy or move and exposes no
- *  mutable access to its parameters. This M1 contract is not an inference
- *  or training engine; those operations will be added by implementations
- *  that advertise the corresponding capabilities.
+ *  mutable access to its parameters. M2 adds CPU inference; training and
+ *  validation remain explicitly unsupported.
  */
 class NeuralExecutionSession {
 public:
@@ -97,6 +96,18 @@ public:
     NeuralParameterSnapshot export_snapshot() const;
     /** @brief Query a concrete supported operation of this session. */
     bool supports(NeuralOperation operation) const noexcept;
+
+    /** @brief Evaluate a finite input vector of exactly input_dimension entries.
+     *  @throws std::invalid_argument for invalid input shape or non-finite values.
+     *  @throws std::overflow_error for a non-finite intermediate or output.
+     */
+    std::vector<double> infer(std::vector<double> const& input) const;
+
+    /** @brief Evaluate rows of shape [batch, input_dimension].
+     *  Empty batches are accepted, and all rows validated before evaluation.
+     */
+    std::vector<std::vector<double>> infer_batch(
+        std::vector<std::vector<double>> const& inputs) const;
 
     /** @brief Require an operation without silently falling back.
      *  @throws std::logic_error when the operation is unsupported.

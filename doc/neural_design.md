@@ -503,6 +503,29 @@ single-layer affine cases agree with analytic results; consistent
 inference is exposed through C++ and Python and demonstrated in both
 `tutorial_neural.cpp` and `tutorial_neural.py`.
 
+**M2 implementation (2026-11-03):** Native CPU now implements synchronous
+`NeuralExecutionSession::infer(input)` and `infer_batch(inputs)`, mirrored in
+Python. Inputs are logical [batch, input_dimension] rows and results are
+[batch, output_dimension] rows; an empty batch produces an empty result.
+Every row is dimension- and finiteness-validated before the batch evaluates.
+The dedicated `src/cpu/inference.cpp` evaluates canonical output-major
+weights, accumulating from the bias with binary64 `std::fma` in feature
+order. Identity, ReLU, tanh, sigmoid (sign-conditional exponential), and
+softplus (stable `log1p` formulation) are supported. This is approximate
+binary64 inference, not validated arithmetic; cross-platform bit-for-bit
+equivalence is not claimed. Nonfinite affine intermediate/output values
+raise `std::overflow_error` instead of silently propagating NaNs/Infs.
+Frozen snapshots remain immutable; derivatives, training and all
+non-NativeCpu backends remain unsupported. Focused C++ and Python tests
+cover two-layer ReLU, batch, empty batch, shape errors, nonfinite inputs,
+overflow, activation extremes and frozen-state invariants, and both
+tutorials demonstrate inference. Validation gate: run CMake builds and
+all CI workflows at the new revision, particularly Windows/MSVC.
+The earlier Ubuntu/GCC coverage issue was green at `3bde4b7`, while
+Windows/MSVC builds remained red. Neither is claimed repaired by
+M2 without a new green run. Next steps: address M0 Windows, verify
+M2 on platforms, then proceed to M3 derivatives.
+
 ### M3 — Derivatives and backpropagation
 
 **Deliverables:** Implement native CPU layerwise reverse-mode derivatives
@@ -662,6 +685,7 @@ must **not** carry this header.
 | 2026-11-03 | Multi-backend architecture | Design agreed; not implemented | Split canonical model/snapshot, execution backend and high-level operations; plan native CPU, Ariadne validated, optional LibTorch C++ and MLX C++ implementations. M1 must define backend capabilities and data conversion; no runtime API or code added yet. |
 | 2026-11-03 | M1 core implementation | Implemented; CI pending | Added `NeuralNetwork`, `NeuralDenseLayerSpec`, `NeuralDenseLayerLayout`, `NeuralParameterSnapshot`, `NeuralExecutionSession`, backend/operation enums and truthful capability queries. Added C++ `test_network`/`test_backend`, Python `test_network.py`, matching tutorial updates and umbrella headers. No inference, gradients, training, or persistence yet. Validation: positive dimensions, nonempty layers, known activations, overflow-checked weight/bias offsets, finite binary64 parameters, matching array lengths, and rejection of unsupported backends. |
 
+| 2026-11-03 | M2 CPU inference | Implemented; full CI pending | Added NativeCpu single/batch forward API, row-major FMA kernels, stable activation functions, input and intermediate checks; C++/Python tests and tutorials. No gradients or validated evaluation. Windows regression must be rerun and diagnosed. |
 | 2026-11-03 | Testing performance regression | Dependency propagation; CI pending | Updated Testing, Function, and Threading gitlinks after fixing eager operand rendering for successful console assertions. Numeric oracle checks are unchanged; no neural architecture or runtime semantics altered. |
 
 ## Engineering and CI policy
