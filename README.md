@@ -35,9 +35,9 @@ combining Neural with SMT and dynamic-system verification.
 - `include/neural/` and `include/ariadne-neural.hpp`: public C++ API.
 - `src/`: compiled Neural objects.
 - `tests/`: standalone C++ tests using Ariadne Testing.
-- `python/bindings/`, `python/tests/`, `python/tutorials/`: optional
-  combined `pyariadne` binding infrastructure and examples.
-- `tutorials/tutorial_neural/`: installed C++ consumer smoke example.
+- `python/bindings/`, `python/tests/`: optional `pyariadne` bindings and tests.
+- `tutorial/`: C++ and Python `tutorial_neural` examples together, plus
+  standalone CMake files for the installed C++ consumer.
 - `doc/neural_design.md`: goals, design decisions, and implementation roadmap.
 
 ## Build and test

@@ -64,7 +64,7 @@ jobs:
 
       - name: Prepare C++ neural tutorial
         if: matrix.build_type == 'Release'
-        run: cmake -E copy_directory "$GITHUB_WORKSPACE/tutorials/tutorial_neural" "${{ runner.workspace }}/tutorial_neural"
+        run: cmake -E copy_directory "$GITHUB_WORKSPACE/tutorial" "${{ runner.workspace }}/tutorial_neural"
 
       - name: Build and check C++ neural tutorial
         if: matrix.build_type == 'Release'
@@ -82,7 +82,7 @@ jobs:
 
       - name: Check installed Python neural tutorial
         if: matrix.build_type == 'Release'
-        working-directory: ${{ github.workspace }}/python/tutorials
+        working-directory: ${{ github.workspace }}/tutorial
         env:
           PYTHONPATH: ${{ runner.workspace }}/install/lib/python3.13/site-packages
           LD_LIBRARY_PATH: ${{ runner.workspace }}/install/lib

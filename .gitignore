@@ -1,4 +1,4 @@
 build*
 python/tests/__pycache__/
-python/tutorials/__pycache__/
+tutorial/__pycache__/
 .pytest_cache/

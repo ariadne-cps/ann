@@ -208,8 +208,8 @@ semantics). A serialized snapshot hash is planned for this purpose.
 ## Engineering and CI policy
 
 Follow the modular Ariadne layout: `include/neural`, `src`, `tests`,
-`python/bindings`, `python/tests`, `python/tutorials`,
-`tutorials/tutorial_neural`, and `doc`; provide
+`python/bindings`, `python/tests`, a single `tutorial/` directory holding
+both `tutorial_neural.cpp` and `tutorial_neural.py`, and `doc`; provide
 `include/ariadne-neural.hpp` as the umbrella header.
 
 Follow Function's standalone build conventions: CMake 3.15+, C++20,
