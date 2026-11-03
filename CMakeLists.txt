@@ -77,6 +77,13 @@ setup_standalone_project_tests(
         "${PROJECT_SOURCE_DIR}/src"
 )
 
+# The testing orchestrator may auto-register an existing benchmarks directory.
+# Register it explicitly only when its executable is not already present.
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR
+   AND NOT TARGET benchmark_optimizers)
+    add_subdirectory(benchmarks)
+endif()
+
 if(BUILD_PYTHON_BINDINGS)
     add_subdirectory(python)
 endif()

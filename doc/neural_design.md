@@ -696,6 +696,44 @@ learning, and validated training guarantees remain outside M4.
 No serialization format is implemented: the agreed M5 storage plan
 remains versioned JSON plus Safetensors and ONNX for portability.
 
+### M4 performance benchmark baseline (2026-11-03)
+
+**Implemented as a benchmark harness; performance results not yet established.**
+`benchmarks/benchmark_optimizers.cpp` compares end-to-end native CPU
+SGD and AdamW over the same sequential 8→hidden-width→1 Tanh/Identity
+regression model, fixed finite synthetic input/target batch and
+`neural_initialize_parameters` snapshot. The fixed seed, initial model,
+batch, number of optimizer steps, and loss function are identical.
+Optimizer-specific learning rates, SGD momentum and weight decay are
+explicit command-line choices. The reported **median nanoseconds per
+training step** comes from an unmeasured full warm-up followed by an odd
+number of timed trials, with alternating optimizer order. Each trial
+restarts from the identical frozen snapshot so stateful training
+does not contaminate measurements; final sample-mean MSE is evaluated
+after timing. A deterministic replay check detects unexpected variation
+in the outcome of repeated trials.
+
+The command line follows Numeric's benchmark patterns (strict numeric
+option parsing, named arguments, logger output and medians), using
+`ThreadingCommandLineInterface` and initializing ThreadManager to
+attach the logger's thread registry. Only `--concurrency 0` is valid
+because native M4 training is sequential; nonzero thread counts are
+rejected instead of misleadingly advertising scalability. All timing
+includes forward/loss/backward passes, gradient accumulation, optimizer
+and snapshot/state update; model generation, session construction and
+final loss inspection are outside the timed interval. MSE after the
+same number of steps is reported as a separate metric, **not** a
+time-to-equal-quality claim. No performance ratios are reported here
+until run on an identified system in a specified build configuration.
+
+The standalone `benchmarks` target builds the executable. A fast Debug
+CTest smoke invocation is included in the `tests` target to check CLI
+integration and compilation under all CI warning settings, without
+enforcing unstable latency thresholds. Future optimization work must
+compare against this baseline using matched workloads and document
+hardware, build type, compiler and scheduler settings. No new
+production dependency, Neural API, or backend is introduced.
+
 ### M5 — Persistence, freezing, and transfer learning
 
 **Deliverables:** Backend-neutral versioned canonical JSON manifest plus
@@ -826,6 +864,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
+| 2026-11-03 | M4 comparative optimizer benchmark | Implemented; CI pending | Added standalone SGD-versus-AdamW sequential end-to-end training benchmark with ThreadingCommandLineInterface, logger-backed reporting, strict options, repeated warm-up/median measurements, same seeded initial model/data, alternating order, fixed-step final MSE and deterministic replay checks. Added CMake benchmarks target and Debug CI smoke with no speed thresholds; README and benchmark contract updated. Does not claim parallel execution or optimizer superiority. |
 | 2026-11-03 | M4 frozen-session capability contract | Fixed; CI pending | Debug Python CTest on Ubuntu/macOS/Windows exposed two expectations that frozen NeuralExecutionSession rejects Training. M4 had incorrectly made its per-session supports()/require() accept Training merely because backend-wide NativeCpu supports it. Restored the intended distinction: neural_backend_supports(NativeCpu, Training) remains true, while frozen sessions reject Training and only mutable NeuralTrainingSession performs updates. Added both sides of this contract to C++ and Python assertions; no training algorithm, numerical oracle, or coverage removed. |
 | 2026-11-03 | M4 sequential CPU training | Implemented; CI pending | Added separate mutable training workspace, sample-mean MSE and stable BCE with logits, SGD with momentum/coupled decay, AdamW with decoupled decay, deterministic Xavier initialization and shuffled sample indices. C++/Python tests and tutorials cover independent step oracles, convergence, shape errors and frozen snapshot/failed-step invariants. No parallel training, persistence or validation guarantee; rerun platform CI. |
 | 2026-11-03 | Model storage/exchange format decision | Design agreed; not implemented | Selected ONNX for external model portability and versioned JSON manifest + Safetensors for canonical Neural storage. Required binary64-preserving internal round trips, semantic checks for ONNX, clear rejection of unsupported operators/metadata and no mandatory ML runtime. Schema, identity digest, dependencies, parsers, and tests remain M5 implementation work; this change contains no runtime code. |
