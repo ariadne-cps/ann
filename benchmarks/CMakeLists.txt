@@ -4,8 +4,11 @@ if(NOT TARGET benchmarks)
 endif()
 
 add_executable(benchmark_optimizers benchmark_optimizers.cpp)
+# setup_project_library() bundles all transitive submodule object targets
+# (including Threading/Logging) into ariadne-neural for standalone builds.
+# There is no independent ariadne-threading library in this project.
 target_link_libraries(benchmark_optimizers PRIVATE
-    ariadne-neural neural ariadne-threading threading
+    ariadne-neural neural
 )
 add_dependencies(benchmarks benchmark_optimizers)
 
@@ -22,8 +25,6 @@ if(TARGET tests)
         set_tests_properties(benchmark_optimizers_smoke PROPERTIES
             ENVIRONMENT_MODIFICATION
                 "PATH=path_list_prepend:$<TARGET_FILE_DIR:ariadne-neural>"
-                "PATH=path_list_prepend:$<TARGET_FILE_DIR:ariadne-threading>"
-                "PATH=path_list_prepend:$<TARGET_FILE_DIR:ariadne-logging>"
         )
     endif()
 endif()
