@@ -46,12 +46,12 @@ public:
         }
         ARIADNE_TESTING_PROVE(neural_backend_supports(
             NeuralBackendKind::NativeCpu, NeuralOperation::ImportSnapshot));
-        for (auto op : {NeuralOperation::Inference, NeuralOperation::BatchInference}) {
+        for (auto op : {NeuralOperation::Inference, NeuralOperation::BatchInference,
+                        NeuralOperation::InputDerivatives,
+                        NeuralOperation::ParameterGradients}) {
             ARIADNE_TESTING_PROVE(neural_backend_supports(NeuralBackendKind::NativeCpu, op));
         }
-        for (auto op : {NeuralOperation::InputDerivatives,
-                        NeuralOperation::ParameterGradients,
-                        NeuralOperation::Training,
+        for (auto op : {NeuralOperation::Training,
                         NeuralOperation::ValidatedBounds}) {
             ARIADNE_TESTING_PROVE(!neural_backend_supports(NeuralBackendKind::NativeCpu, op));
         }

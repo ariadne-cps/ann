@@ -88,6 +88,18 @@ void neural_submodule(pybind11::module& module) {
         .value("Training", NeuralOperation::Training)
         .value("ValidatedBounds", NeuralOperation::ValidatedBounds);
 
+    pybind11::enum_<NeuralGradientReduction>(module, "NeuralGradientReduction")
+        .value("Sum", NeuralGradientReduction::Sum)
+        .value("Mean", NeuralGradientReduction::Mean);
+
+    pybind11::class_<NeuralGradientResult>(module, "NeuralGradientResult")
+        .def_readonly("input_gradient", &NeuralGradientResult::input_gradient)
+        .def_readonly("parameter_gradient", &NeuralGradientResult::parameter_gradient);
+
+    pybind11::class_<NeuralBatchGradientResult>(module, "NeuralBatchGradientResult")
+        .def_readonly("input_gradients", &NeuralBatchGradientResult::input_gradients)
+        .def_readonly("parameter_gradient", &NeuralBatchGradientResult::parameter_gradient);
+
     module.def("neural_backend_available", &neural_backend_available,
                pybind11::arg("backend"));
     module.def("neural_backend_supports", &neural_backend_supports,
@@ -102,6 +114,13 @@ void neural_submodule(pybind11::module& module) {
         .def("export_snapshot", &NeuralExecutionSession::export_snapshot)
         .def("infer", &NeuralExecutionSession::infer, pybind11::arg("input"))
         .def("infer_batch", &NeuralExecutionSession::infer_batch, pybind11::arg("inputs"))
+        .def("differentiate", &NeuralExecutionSession::differentiate,
+             pybind11::arg("input"), pybind11::arg("output_cotangent"))
+        .def("input_jacobian", &NeuralExecutionSession::input_jacobian,
+             pybind11::arg("input"))
+        .def("differentiate_batch", &NeuralExecutionSession::differentiate_batch,
+             pybind11::arg("inputs"), pybind11::arg("output_cotangents"),
+             pybind11::arg("reduction") = NeuralGradientReduction::Sum)
         .def("supports", &NeuralExecutionSession::supports)
         .def("require", &NeuralExecutionSession::require);
 }

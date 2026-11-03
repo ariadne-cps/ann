@@ -30,6 +30,7 @@ from pyariadne import (
     NeuralBackendKind,
     NeuralDenseLayerSpec,
     NeuralExecutionSession,
+    NeuralGradientReduction,
     NeuralNetwork,
     NeuralOperation,
     NeuralParameterSnapshot,
@@ -129,3 +130,40 @@ def test_stable_cpu_activations():
         [1e308, 0.0]))
     with pytest.raises(OverflowError):
         overflow.infer([1e308])
+
+
+def test_m3_affine_derivatives_and_batch():
+    network = NeuralNetwork(2, [NeuralDenseLayerSpec(2, NeuralActivation.Identity)])
+    session = NeuralExecutionSession(NeuralParameterSnapshot(
+        network, [2.0, 3.0, -1.0, 4.0, 5.0, 6.0]))
+    assert session.supports(NeuralOperation.InputDerivatives)
+    assert session.supports(NeuralOperation.ParameterGradients)
+    assert not session.supports(NeuralOperation.Training)
+    gradient = session.differentiate([1.0, 2.0], [7.0, -2.0])
+    assert gradient.input_gradient == [16.0, 13.0]
+    assert gradient.parameter_gradient == [7.0, 14.0, -2.0, -4.0, 7.0, -2.0]
+    assert session.input_jacobian([1.0, 2.0]) == [[2.0, 3.0], [-1.0, 4.0]]
+    summed = session.differentiate_batch(
+        [[1.0, 2.0], [3.0, 4.0]], [[7.0, -2.0], [1.0, 1.0]])
+    assert summed.input_gradients == [[16.0, 13.0], [1.0, 7.0]]
+    assert summed.parameter_gradient == [10.0, 18.0, 1.0, 0.0, 8.0, -1.0]
+    averaged = session.differentiate_batch(
+        [[1.0, 2.0], [3.0, 4.0]], [[7.0, -2.0], [1.0, 1.0]],
+        NeuralGradientReduction.Mean)
+    assert averaged.parameter_gradient == [5.0, 9.0, 0.5, 0.0, 4.0, -0.5]
+    assert averaged.input_gradients == [[8.0, 6.5], [0.5, 3.5]]
+    assert session.differentiate_batch([], []).parameter_gradient == [0.0] * 6
+    with pytest.raises(ValueError):
+        session.differentiate_batch([], [], NeuralGradientReduction.Mean)
+    with pytest.raises(ValueError):
+        session.differentiate([1.0, 2.0], [1.0])
+
+
+def test_m3_relu_at_kink_and_snapshot():
+    session = NeuralExecutionSession(NeuralParameterSnapshot(
+        NeuralNetwork(1, [NeuralDenseLayerSpec(1, NeuralActivation.Relu)]),
+        [1.0, 0.0]))
+    gradient = session.differentiate([0.0], [3.0])
+    assert gradient.input_gradient == [0.0]
+    assert gradient.parameter_gradient == [0.0, 0.0]
+    assert session.export_snapshot().values() == [1.0, 0.0]

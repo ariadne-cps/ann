@@ -5,9 +5,9 @@
 This document records the initial design decisions for the `ariadne-cps/neural`
 repository. It is a design journal and roadmap, **not** a claim that the
 features below have already been implemented. The initial repository bootstrap established build infrastructure and smoke
-bindings. M1 now implements the canonical dense network topology, frozen
-binary64 parameter snapshots, and a backend capability/import boundary;
-forward inference and training remain unimplemented.
+bindings. M1 implements canonical network topology and frozen binary64 snapshots;
+M2 implements approximate native CPU inference, and M3 implements native CPU
+reverse-mode derivatives. Training, persistence, and validation remain planned.
 
 Ariadne Neural aims to provide an autonomous, portable, CPU-first C++20
 framework for neural-network inference and learning. Its distinctive goal is
@@ -539,6 +539,41 @@ differences agree away from nonsmooth points; gradient shapes, scaling
 (sum versus mean), bias accumulation, and input Jacobians are tested.
 Do not use finite differences themselves as a formal guarantee.
 
+**M3 native CPU implementation (2026-11-03):** The existing frozen
+`NeuralExecutionSession` exposes a scalar-output vector-Jacobian product
+`differentiate(input, output_cotangent)` returning the input gradient and
+flattened canonical parameter gradient; `input_jacobian(input)` returns
+`[output_dimension, input_dimension]` rows; `differentiate_batch(inputs,
+output_cotangents, reduction)` returns per-row input gradients and a
+sum/mean-reduced parameter gradient. The output cotangent specifies the
+per-sample scalar objective as its dot product with the network output;
+no loss, optimizer or mutable training workspace is assumed. For mean
+reduction **both** parameter gradients and per-sample input gradients are
+divided by the batch size. Empty sum batches yield a zero parameter
+gradient and no input rows; empty mean batches are rejected.
+The CPU implementation shares M2's forward activation and affine kernels
+and caches per-layer preactivations/outputs only when reverse mode is
+requested. Backpropagation uses reverse layer order, transposed linear
+maps, and outer products for weight gradients. The ReLU computational
+derivative at exactly zero is **0**, a chosen subgradient convention,
+not a mathematical differentiability claim. Sigmoid and softplus use
+stable exponentials; tanh uses `1 - tanh(z)^2`.
+Parameters and input/cotangent shapes must match the canonical snapshot.
+Non-finite inputs/cotangents are rejected; non-finite products or
+accumulations throw instead of silently exporting invalid gradients.
+FMA order, overflow behavior, and floating-point results are
+approximate and not certificates. The `InputDerivatives` and
+`ParameterGradients` capability flags become true for NativeCpu only;
+Training and ValidatedBounds remain unsupported. C++ tests cover
+analytic affine Jacobians/VJPs, independent centered finite-difference
+checks on a multilayer smooth network, kink policy, activation extremes,
+batch sums/means, validation/overflow, and snapshot immutability.
+Matching Python tests and tutorials exercise the public binding.
+The Python CTest test registration is corrected to discover the
+entire Python tests directory; previously it only ran `test_neural.py`.
+The full CI gate for this increment remains pending; do not infer success
+from prior green M2 runs.
+
 ### M4 — Native training and optimizers
 
 **Deliverables:** Add backend-neutral training requests plus native-CPU
@@ -679,6 +714,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
+| 2026-11-03 | M3 CPU autodiff | Implemented; CI pending | Native CPU reverse-mode input and canonical parameter gradients, full input Jacobian, batch sum/mean VJP accumulation and ReLU-at-zero subgradient=0; C++ analytic and finite-difference tests, Python tests, tutorial examples, README and Python CTest discovery correction. No training or validated claims; run all platform CI. |
 | 2026-11-03 | Bootstrap | Implemented (CI under observation) | Project skeleton, pinned Configuration/Testing/Function/Threading, source and binding smoke tests, shared `tutorial/` directory, CI workflows. No neural model or training implementation. |
 | 2026-11-03 | M0 | Planned / investigation open | Linux/GCC coverage job fails in completed earlier runs; macOS coverage passes. Establish root cause and fix before M1. |
 | 2026-11-03 | Planning | Recorded | Milestones M0–M9 and mandatory per-implementation design-log update policy established; no new runtime functionality in this change. |

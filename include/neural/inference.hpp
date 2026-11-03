@@ -25,6 +25,7 @@
 #ifndef ARIADNE_NEURAL_CPU_INFERENCE_HPP
 #define ARIADNE_NEURAL_CPU_INFERENCE_HPP
 #include "neural/network.hpp"
+#include "neural/derivatives.hpp"
 #include <vector>
 namespace Ariadne::NeuralCpu {
 std::vector<double> infer(NeuralParameterSnapshot const& snapshot,
@@ -32,5 +33,17 @@ std::vector<double> infer(NeuralParameterSnapshot const& snapshot,
 std::vector<std::vector<double>> infer_batch(
     NeuralParameterSnapshot const& snapshot,
     std::vector<std::vector<double>> const& inputs);
+NeuralGradientResult differentiate(
+    NeuralParameterSnapshot const& snapshot,
+    std::vector<double> const& input,
+    std::vector<double> const& output_cotangent);
+std::vector<std::vector<double>> input_jacobian(
+    NeuralParameterSnapshot const& snapshot,
+    std::vector<double> const& input);
+NeuralBatchGradientResult differentiate_batch(
+    NeuralParameterSnapshot const& snapshot,
+    std::vector<std::vector<double>> const& inputs,
+    std::vector<std::vector<double>> const& output_cotangents,
+    NeuralGradientReduction reduction);
 } // namespace Ariadne::NeuralCpu
 #endif // ARIADNE_NEURAL_CPU_INFERENCE_HPP

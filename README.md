@@ -9,7 +9,9 @@
 
 Ariadne Neural is a standalone C++20 library for dense feed-forward neural networks.
 Its current implementation provides canonical network topology, frozen binary64
-parameter snapshots and native-CPU inference for individual samples and batches.
+parameter snapshots and native-CPU inference for individual samples and batches,
+reverse-mode input/parameter derivatives, input Jacobians, and per-batch gradient
+sum or mean reductions.
 Supported layer activations are identity, ReLU, tanh, sigmoid and softplus.
 C++ and Python interfaces expose model metadata, parameter snapshots, backend
 capability queries and CPU inference.

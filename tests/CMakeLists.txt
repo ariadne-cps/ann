@@ -4,6 +4,7 @@ set(UNIT_TESTS
     test_neural
     test_network
     test_backend
+    test_derivatives
     test_umbrella
 )
 

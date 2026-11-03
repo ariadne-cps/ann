@@ -46,3 +46,4 @@ if __name__ == "__main__":
     print("Inference available:", session.supports(NeuralOperation.Inference))
     print('Single inference:', session.infer([3.0, 1.0]))
     print('Batch inference:', session.infer_batch([[3.0, 1.0], [1.0, 4.0]]))
+    print("Output gradient:", session.differentiate([3.0, 1.0], [1.0]).input_gradient)

@@ -44,6 +44,8 @@ int main() {
               << "Inference available: "
               << session.supports(NeuralOperation::Inference) << '\n'
               << "Single inference: " << session.infer({3.0, 1.0}).at(0) << '\n'
-              << "Batch inference: " << session.infer_batch({{3.0, 1.0}, {1.0, 4.0}}).at(1).at(0) << '\n';
+              << "Batch inference: " << session.infer_batch({{3.0, 1.0}, {1.0, 4.0}}).at(1).at(0) << '\n'
+              << "Input derivative of sum of outputs: "
+              << session.differentiate({3.0, 1.0}, {1.0}).input_gradient.at(0) << '\n';
     return 0;
 }

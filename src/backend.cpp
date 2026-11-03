@@ -47,7 +47,9 @@ bool neural_backend_supports(
     return neural_backend_available(backend)
         && (operation == NeuralOperation::ImportSnapshot
             || operation == NeuralOperation::Inference
-            || operation == NeuralOperation::BatchInference);
+            || operation == NeuralOperation::BatchInference
+            || operation == NeuralOperation::InputDerivatives
+            || operation == NeuralOperation::ParameterGradients);
 }
 
 NeuralExecutionSession::NeuralExecutionSession(
@@ -78,6 +80,24 @@ std::vector<std::vector<double>> NeuralExecutionSession::infer_batch(
     std::vector<std::vector<double>> const& inputs) const {
     require(NeuralOperation::BatchInference);
     return NeuralCpu::infer_batch(snapshot_, inputs);
+}
+NeuralGradientResult NeuralExecutionSession::differentiate(
+    std::vector<double> const& input,
+    std::vector<double> const& output_cotangent) const {
+    require(NeuralOperation::ParameterGradients);
+    return NeuralCpu::differentiate(snapshot_, input, output_cotangent);
+}
+std::vector<std::vector<double>> NeuralExecutionSession::input_jacobian(
+    std::vector<double> const& input) const {
+    require(NeuralOperation::InputDerivatives);
+    return NeuralCpu::input_jacobian(snapshot_, input);
+}
+NeuralBatchGradientResult NeuralExecutionSession::differentiate_batch(
+    std::vector<std::vector<double>> const& inputs,
+    std::vector<std::vector<double>> const& output_cotangents,
+    NeuralGradientReduction reduction) const {
+    require(NeuralOperation::ParameterGradients);
+    return NeuralCpu::differentiate_batch(snapshot_, inputs, output_cotangents, reduction);
 }
 void NeuralExecutionSession::require(NeuralOperation operation) const {
     if (!supports(operation)) {
