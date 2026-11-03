@@ -714,6 +714,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
+| 2026-11-03 | M3 Python CI test oracle | Corrected; CI pending | Python CTest discovery in M3 exposed a pre-existing malformed M1 topology assertion in `python/tests/test_network.py`: the second layer's canonical `biases_offset` is 12 for a 2→3→1 network (weights offset 9, three weights), but the expected tuple omitted that fourth field. Updated only the expected metadata tuple; verified it against the M1 row-major offset formula and reported CI actual output. Model, bindings and semantic coverage unchanged; rerun all CI, especially Python CTest. |
 | 2026-11-03 | M3 CPU autodiff | Implemented; CI pending | Native CPU reverse-mode input and canonical parameter gradients, full input Jacobian, batch sum/mean VJP accumulation and ReLU-at-zero subgradient=0; C++ analytic and finite-difference tests, Python tests, tutorial examples, README and Python CTest discovery correction. No training or validated claims; run all platform CI. |
 | 2026-11-03 | Bootstrap | Implemented (CI under observation) | Project skeleton, pinned Configuration/Testing/Function/Threading, source and binding smoke tests, shared `tutorial/` directory, CI workflows. No neural model or training implementation. |
 | 2026-11-03 | M0 | Planned / investigation open | Linux/GCC coverage job fails in completed earlier runs; macOS coverage passes. Establish root cause and fix before M1. |

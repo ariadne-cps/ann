@@ -48,7 +48,7 @@ def test_model_offsets_and_snapshot():
     assert network.output_dimension() == 1
     assert network.parameter_count() == 13
     assert [(layer.inputs, layer.outputs, layer.weights_offset, layer.biases_offset)
-            for layer in network.layers()] == [(2, 3, 0, 6), (3, 1, 9)]
+            for layer in network.layers()] == [(2, 3, 0, 6), (3, 1, 9, 12)]
     params = [float(n) for n in range(13)]
     frozen = NeuralParameterSnapshot(network, params)
     params[0] = -10.0
