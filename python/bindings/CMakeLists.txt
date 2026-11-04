@@ -6,7 +6,6 @@ add_library(pyariadne-neural-submodule-obj OBJECT neural_submodule.cpp)
 target_include_directories(pyariadne-neural-submodule-obj PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${PYTHON_COMMON_SOURCE_DIR}/include"
-    $<TARGET_PROPERTY:pyariadne-function,INTERFACE_INCLUDE_DIRECTORIES>
 )
 target_link_libraries(pyariadne-neural-submodule-obj PRIVATE
     pyariadne-python-common
@@ -21,8 +20,7 @@ target_sources(pyariadne-neural INTERFACE
 )
 target_include_directories(pyariadne-neural INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-    $<TARGET_PROPERTY:pyariadne-function,INTERFACE_INCLUDE_DIRECTORIES>
 )
-target_link_libraries(pyariadne-neural INTERFACE pyariadne-function)
+target_link_libraries(pyariadne-neural INTERFACE pyariadne-python-common)
 
 ariadne_add_python_module(NAME neural MODULE_SOURCE neural_module.cpp)

@@ -22,10 +22,16 @@ capability queries, CPU inference, derivatives and training.
 
 Direct Git submodules, pinned to specific commits:
 
-- [Function](https://github.com/ariadne-cps/function) (`ss/fun`).
-- [Threading](https://github.com/ariadne-cps/threading) (`ss/thr`).
-- [Configuration](https://github.com/ariadne-cps/configuration) (`ss/cfg`).
+- [Threading](https://github.com/ariadne-cps/threading) (`ss/thr`, for scheduling and Logging).
+- [Configuration](https://github.com/ariadne-cps/configuration) (`ss/cfg`, for CMake).
 - [Testing](https://github.com/ariadne-cps/testing) (`ss/tst`, for tests).
+- [PythonCommon](https://github.com/ariadne-cps/python-common) (`ss/pyc`, for optional Python bindings and pybind11).
+
+The C++ neural model, inference, Jacobian, training and serialization code
+does not depend on Function or Symbolic. Function-based and symbolic adapters
+belong in the planned `neuro-symbolic` repository. Threading remains a direct
+dependency for the planned parallel CPU implementation and the Ariadne
+command-line/logger benchmark.
 
 ## Layout
 

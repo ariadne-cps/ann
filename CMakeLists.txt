@@ -21,22 +21,12 @@ if(EXISTS "${PROJECT_SOURCE_DIR}/.git")
     # the shared dependencies newly brought together by Neural.
     require_same_dependency_commit(Configuration CHAINS
         "configuration"
-        "function|configuration"
         "threading|configuration"
         "testing|configuration"
     )
     require_same_dependency_commit(Testing CHAINS
         "testing"
-        "function|testing"
         "threading|testing"
-    )
-    require_same_dependency_commit(Logging CHAINS
-        "threading|logging"
-        "function|geometry|algebra|interval|numeric|logging"
-    )
-    require_same_dependency_commit(Utility CHAINS
-        "threading|logging|utility"
-        "function|geometry|algebra|interval|numeric|foundation|utility"
     )
 endif()
 
@@ -51,7 +41,7 @@ target_include_directories(neural INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/ariadne-neural>
 )
-target_link_libraries(neural INTERFACE function threading)
+target_link_libraries(neural INTERFACE threading)
 
 add_subdirectory(src)
 target_link_libraries(NEURAL_SRC PRIVATE neural)

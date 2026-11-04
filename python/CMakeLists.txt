@@ -9,8 +9,16 @@ option(PYTHON_ENFORCE_TESTS "Enforce Python tests" OFF)
 if(Python3_FOUND)
     report_python_configuration_once()
 
-    if(NOT TARGET pyariadne-function)
-        message(FATAL_ERROR "The Function Python binding target is required to build pyariadne-neural.")
+    if(NOT TARGET pyariadne-python-common)
+        message(FATAL_ERROR "The PythonCommon target is required to build Neural bindings.")
+    endif()
+    if(NOT TARGET pybind11::module)
+        get_target_property(PYTHON_COMMON_SOURCE_DIR pyariadne-python-common SOURCE_DIR)
+        ensure_submodule_initialized(pybind11 REPOSITORY "${PYTHON_COMMON_SOURCE_DIR}")
+        add_subdirectory(
+            "${PYTHON_COMMON_SOURCE_DIR}/pybind11"
+            "${CMAKE_CURRENT_BINARY_DIR}/pybind11"
+        )
     endif()
     add_subdirectory(bindings)
 

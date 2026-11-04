@@ -21,20 +21,19 @@ ecosystem, nor to own the system-level proof workflow.
 
 ## Dependency and responsibility boundaries
 
-Production dependencies are **Function** and **Threading**, alongside
-**Configuration** for CMake. Function transitively supplies Geometry, Algebra,
-Interval, Numeric, Foundation, Logging, Utility, and other lower-level Ariadne
-components. Testing is pinned directly but is used **only for tests**, never
-as a production target dependency. Git-submodule commits must be consistent
+Production depends on **Threading** (and its Logging/Utility transitive
+dependencies) and **Configuration** for CMake. Function is deliberately
+not part of the Neural dependency graph. Python bindings use the standalone
+PythonCommon/pybind11 facilities; Testing remains test-only. Git-submodule commits must be consistent
 across all shared transitive paths.
 
 - **Neural owns:** network architecture, parameters, activations, CPU
   inference, training, neural-specific numerical bounds, structural constraints,
   transfer learning, model serialization, and portable backend interfaces.
-- **Function owns:** general Ariadne function abstractions, composition,
-  differentiation and validated function models. Neural should interoperate
-  with Function without forcing inference to execute through generic
-  expression graphs.
+- **Symbolic/Function own:** expression manipulation and mathematical
+  function abstractions. Their ANN integration belongs in the future
+  `neuro-symbolic` repository, which depends on Neural and Symbolic;
+  Neural must not depend on Function or Symbolic.
 - **Threading owns:** generic task scheduling, parallel loops, fixed-block
   reductions, cancellation and concurrency budgeting. Neural determines
   DNN-specific workload partitioning, buffering, and synchronization.
@@ -277,7 +276,7 @@ not a requirement that every runtime stores tensors identically.
 
 ### Model exchange and persistence format decision (2026-11-03)
 
-**Status: design agreed, not implemented.** There are two separate
+**Status: design agreed; JSON/Safetensors implementation in M5.** There are two separate
 interfaces with different purposes:
 
 - **Portability: ONNX.** Import/export supported model graphs using the
@@ -940,6 +939,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
+| 2026-11-04 | Remove Function dependency from Neural | Implemented; CI pending | Removed Function gitlink, submodule, direct and transitive dependency assertions; retained Threading for planned parallel training, CLI and Logging. Refactored Python bindings to depend on PythonCommon + pybind11 directly, adding PythonCommon as a pinned submodule instead of using pyariadne-function. Preserves combined pyariadne entry for standalone and parent repositories; C++20 neural model/inference/training/serialization logic unchanged. Future neuro-symbolic module consumes Neural and Symbolic (which depends on Function), not vice versa. Full CI and embedding integration pending. |
 | 2026-11-04 | M5 GCC 13 dangling-reference diagnostic | Implemented; CI pending | Replaced temporary std::string argument in JSON field lookup with a literal C-string key, eliminating GCC 13 -Wdangling-reference false positive on references to shape/offsets/layers held in the parsed JSON object; their storage is owned by the Json tree and remains live. No suppression of -Werror or parser validation. Verified source patch; CI not yet completed. |
 | 2026-11-04 | M5 JSON plus Safetensors persistence | Implemented; CI pending | Introduced version-1 JSON topology manifest and standard Safetensors F64 layer tensors, exact binary64 bit patterns including signed zero, strict input bounds/schema/shape/offset checks, C++/Python save/load API and tests. Remains a two-file non-atomic checkpoint without a cryptographic identity; ONNX, freezing and transfer not yet implemented. No new mandatory dependency. |
 | 2026-11-04 | M4 benchmark GCC Debug lifetime fix | Fixed; CI pending | GCC 13 Debug -Werror=dangling-reference reported an iteration over `trainer.export_snapshot().values()` in benchmark checksum(). Since export_snapshot() returns a temporary and values() returns a reference, retain the snapshot as a named local for the full iteration. Semantics, timings and test coverage are unchanged; keep compiler warnings as errors. Ubuntu GCC Debug build, sanitizer/coverage failures and complete CI require verification on this commit. |
