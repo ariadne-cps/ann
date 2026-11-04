@@ -62,32 +62,47 @@ the `pyariadne` module. Set `-DBUILD_PYTHON_BINDINGS=OFF` to disable them.
 
 ## Performance benchmark
 
-Build the native CPU optimizer benchmark separately from correctness tests:
+Build a Release executable to compare the same three training algorithms on
+matched, seeded regression networks:
 
 ```sh
 cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
 cmake --build build-release --parallel --target benchmark_optimizers
 ./build-release/benchmarks/benchmark_optimizers \
     --iterations 50 --samples 7 --batch-size 16 --width 32 \
-    --seed 42 --sgd-lr 0.01 --adamw-lr 0.01 --concurrency 0
+    --seed 42 --seeds 3 --target-loss 0.001 --max-steps 500 \
+    --sgd-lr 0.01 --sgd-momentum 0.9 --adamw-lr 0.01 --concurrency 0
 ```
 
-The benchmark uses `ThreadingCommandLineInterface` (including logging,
-`--help`, and `--concurrency`) and reports results through Ariadne logging.
-Both optimizers train the **same seeded 8–32–1 network and synthetic MSE
-dataset**. Each measured sample starts with identical frozen parameters;
-a warm-up run is excluded, execution order alternates, and the median
-nanoseconds per training step is reported along with the final loss after the
-same number of steps. Use `--sgd-momentum` and `--weight-decay` to alter
-optimizer options. `--width` changes the hidden size and `--batch-size`
-changes mini-batch size; both apply to both optimizers.
+The optimizer variants are **SGD**, **SGD with classical momentum**, and
+**AdamW**. Each variant receives the same initialized 8 -> hidden -> 1 network
+and the same fixed synthetic regression batch at each seed. The loss is the
+half-squared-error sum over output features averaged across samples; it is
+not the usual unscaled mean squared error.
 
-This measures **end-to-end sequential training**, including forward/backward
-passes and optimizer state/snapshot updates, rather than just optimizer update
-arithmetic. The training implementation is not parallelized: only
-`--concurrency 0` is accepted. Final losses reflect the configured learning
-rates and are not a matched-quality comparison. The tiny CI smoke test
-checks execution, not benchmark performance or a speedup threshold.
+Two experiments are measured independently. The *fixed-step* experiment
+reports median nanoseconds per complete training update and the final loss
+after `--iterations` updates. The *time-to-target* experiment reports
+milliseconds and the number of updates needed to first reach
+`--target-loss`, up to `--max-steps`. It includes an extra loss evaluation
+after each update, so the timing figures from the two experiments must not
+be compared as equivalent operation costs. A target not reached within
+the budget is reported as **censored**, including its final loss; it is
+not silently omitted or assigned an invented completion time.
+
+Both experiments use one unmeasured warm-up, odd-sample median timing,
+rotating optimizer execution order, and reproducibility checks. `--seeds`
+runs paired experiments on consecutive initial seeds. The summary reports
+hit counts for all seeds, but only summarizes time-to-target when **every**
+paired seed reached the threshold. Each optimizer has configurable learning
+rate, momentum (SGD only), and weight decay. Defaults do not imply equal
+hyperparameter tuning.
+
+Arguments, `--help`, logging and `--concurrency` are handled by Ariadne's
+`ThreadingCommandLineInterface`. Native M4 training remains sequential;
+only `--concurrency 0` is accepted. A lightweight Debug CI smoke test
+checks the benchmark without imposing timing or convergence thresholds.
+For meaningful comparisons record compiler, build flags and hardware.
 
 ## License
 

@@ -18,7 +18,8 @@ if(TARGET tests)
     add_dependencies(tests benchmark_optimizers)
     add_test(NAME benchmark_optimizers_smoke
         COMMAND $<TARGET_FILE:benchmark_optimizers>
-            --iterations 2 --samples 3 --batch-size 4 --width 4 --concurrency 0
+            --iterations 2 --samples 3 --batch-size 4 --width 4
+            --seeds 1 --max-steps 3 --target-loss 0.000001 --concurrency 0
     )
     set_property(TEST benchmark_optimizers_smoke PROPERTY LABELS "benchmark-smoke")
     if(WIN32)

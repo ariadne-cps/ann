@@ -47,10 +47,13 @@ struct Options {
     unsigned samples = 7u;
     unsigned batch_size = 16u;
     unsigned hidden_width = 32u;
+    unsigned seeds = 3u;
+    unsigned max_steps = 500u;
+    double target_loss = 0.001;
     std::uint64_t seed = 42u;
     double sgd_rate = 0.01;
     double adamw_rate = 0.01;
-    double momentum = 0.0;
+    double momentum = 0.9;
     double weight_decay = 0.0;
 };
 
@@ -138,6 +141,27 @@ List<ArgumentParser> parsers(Options& selection) {
             const double n = parse_finite(value, false);
             return [&selection,n] { selection.weight_decay = n; };
         }));
+
+    result.append(make_valued_argument_parser(
+        "", "seeds", "Number of paired seed workloads (1..16; default 3)",
+        [&selection](String const& v)->VoidFunction {
+            const unsigned n = parse_unsigned<unsigned>(v);
+            if (n == 0u || n > 16u) throw std::invalid_argument("invalid seeds");
+            return [&selection,n] { selection.seeds = n; };
+        }));
+    result.append(make_valued_argument_parser(
+        "", "max-steps", "Time-to-target budget (1..100000; default 500)",
+        [&selection](String const& v)->VoidFunction {
+            const unsigned n = parse_unsigned<unsigned>(v);
+            if (n == 0u || n > 100000u) throw std::invalid_argument("invalid max-steps");
+            return [&selection,n] { selection.max_steps = n; };
+        }));
+    result.append(make_valued_argument_parser(
+        "", "target-loss", "Target half-squared-error loss (finite positive)",
+        [&selection](String const& v)->VoidFunction {
+            const double x = parse_finite(v,true);
+            return [&selection,x] { selection.target_loss = x; };
+        }));
     return result;
 }
 
@@ -172,57 +196,129 @@ Workload make_workload(Options const& options) {
     return workload;
 }
 
-struct Measurement {
-    double nanoseconds_per_step;
+enum class Variant { Sgd, SgdMomentum, AdamW };
+
+char const* name(Variant v) {
+    switch(v) {
+        case Variant::Sgd: return "SGD";
+        case Variant::SgdMomentum: return "SGD+momentum";
+        case Variant::AdamW: return "AdamW";
+        default: throw std::invalid_argument("invalid variant");
+    }
+}
+
+NeuralOptimizerOptions optimizer(Options const& options, Variant v) {
+    NeuralOptimizerOptions opt;
+    opt.weight_decay = options.weight_decay;
+    switch(v) {
+        case Variant::Sgd:
+            opt.kind = NeuralOptimizerKind::Sgd;
+            opt.learning_rate = options.sgd_rate;
+            opt.momentum = 0.0;
+            break;
+        case Variant::SgdMomentum:
+            opt.kind = NeuralOptimizerKind::Sgd;
+            opt.learning_rate = options.sgd_rate;
+            opt.momentum = options.momentum;
+            break;
+        case Variant::AdamW:
+            opt.kind = NeuralOptimizerKind::AdamW;
+            opt.learning_rate = options.adamw_rate;
+            break;
+        default: throw std::invalid_argument("invalid variant");
+    }
+    return opt;
+}
+
+double checksum(NeuralTrainingSession const& trainer) {
+    double total = 0.0;
+    for(double v:trainer.export_snapshot().values()) total += v;
+    if(!std::isfinite(total)) throw std::runtime_error("invalid model checksum");
+    return total;
+}
+
+struct Fixed {
+    double ns_step;
     double final_loss;
-    double parameter_checksum;
+    double checksum;
 };
 
-Measurement run_once(Workload const& workload, Options const& selection,
-                     NeuralOptimizerKind kind) {
-    NeuralOptimizerOptions optimizer;
-    optimizer.kind = kind;
-    optimizer.learning_rate =
-        kind == NeuralOptimizerKind::Sgd ? selection.sgd_rate : selection.adamw_rate;
-    optimizer.weight_decay = selection.weight_decay;
-    if (kind == NeuralOptimizerKind::Sgd) optimizer.momentum = selection.momentum;
-    NeuralTrainingSession training(workload.initial, optimizer);
-    const auto start = std::chrono::steady_clock::now();
-    for (unsigned step = 0u; step < selection.iterations; ++step)
-        (void)training.train_batch(workload.inputs, workload.targets);
-    const auto stop = std::chrono::steady_clock::now();
+Fixed time_steps(Workload const& w, Options const& opt, Variant v) {
+    NeuralTrainingSession trainer(w.initial,optimizer(opt,v));
+    auto start = std::chrono::steady_clock::now();
+    for(unsigned i=0u;i<opt.iterations;++i)
+        (void)trainer.train_batch(w.inputs,w.targets);
+    auto end = std::chrono::steady_clock::now();
+    if(trainer.steps()!=static_cast<std::size_t>(opt.iterations))
+        throw std::runtime_error("invalid number of training steps");
+    const double ns=std::chrono::duration<double,std::nano>(end-start).count()
+        / static_cast<double>(opt.iterations);
+    const double loss=trainer.loss_batch(w.inputs,w.targets);
+    if(!std::isfinite(ns) || ns<=0.0 || !std::isfinite(loss))
+        throw std::runtime_error("invalid fixed timing");
+    return {ns,loss,checksum(trainer)};
+}
 
-    if (training.steps() != static_cast<std::size_t>(selection.iterations))
-        throw std::runtime_error("incorrect number of optimizer updates");
-    const double elapsed_ns =
-        std::chrono::duration<double, std::nano>(stop - start).count();
-    const double ns_step = elapsed_ns / static_cast<double>(selection.iterations);
-    const double final_loss = training.loss_batch(workload.inputs, workload.targets);
-    double checksum = 0.0;
-    for (double p : training.export_snapshot().values()) checksum += p;
-    if (!std::isfinite(ns_step) || ns_step <= 0.0 ||
-        !std::isfinite(final_loss) || !std::isfinite(checksum))
-        throw std::runtime_error("invalid benchmark measurement");
-    return {ns_step, final_loss, checksum};
+struct Target {
+    bool reached;
+    unsigned steps;
+    double milliseconds;
+    double final_loss;
+    double checksum;
+};
+
+Target time_to_target(Workload const& w, Options const& opt, Variant v) {
+    NeuralTrainingSession trainer(w.initial,optimizer(opt,v));
+    double loss=trainer.loss_batch(w.inputs,w.targets);
+    unsigned steps=0u;
+    auto start=std::chrono::steady_clock::now();
+    while(loss>opt.target_loss && steps<opt.max_steps) {
+        (void)trainer.train_batch(w.inputs,w.targets);
+        ++steps;
+        // Include every post-step loss evaluation in time-to-target.
+        loss=trainer.loss_batch(w.inputs,w.targets);
+    }
+    auto end=std::chrono::steady_clock::now();
+    const double ms=std::chrono::duration<double,std::milli>(end-start).count();
+    if(trainer.steps()!=static_cast<std::size_t>(steps) ||
+       !std::isfinite(ms) || ms<0.0 || !std::isfinite(loss))
+        throw std::runtime_error("invalid convergence timing");
+    return {loss<=opt.target_loss,steps,ms,loss,checksum(trainer)};
+}
+
+double median(std::vector<double> times) {
+    if(times.empty()) throw std::runtime_error("empty timing data");
+    std::sort(times.begin(),times.end());
+    return times[times.size()/2u];
 }
 
 struct Summary {
-    double median_ns_step;
+    double ns_step;
     double final_loss;
+    bool reached;
+    unsigned steps;
+    double target_ms;
+    double last_loss;
 };
 
-Summary summarize(std::vector<Measurement> const& measurements) {
-    if (measurements.empty()) throw std::runtime_error("no benchmark measurements");
-    std::vector<double> times;
-    times.reserve(measurements.size());
-    for (auto const& m : measurements) {
-        if (m.final_loss != measurements.front().final_loss ||
-            m.parameter_checksum != measurements.front().parameter_checksum)
-            throw std::runtime_error("optimizer replay is not deterministic");
-        times.push_back(m.nanoseconds_per_step);
+Summary summarize(std::vector<Fixed> const& fixed,
+                  std::vector<Target> const& targets) {
+    if(fixed.empty() || fixed.size()!=targets.size())
+        throw std::runtime_error("unpaired timing samples");
+    std::vector<double> fixed_times,target_times;
+    for(std::size_t i=0u;i<fixed.size();++i) {
+        if(fixed[i].final_loss!=fixed[0].final_loss ||
+           fixed[i].checksum!=fixed[0].checksum ||
+           targets[i].reached!=targets[0].reached ||
+           targets[i].steps!=targets[0].steps ||
+           targets[i].final_loss!=targets[0].final_loss ||
+           targets[i].checksum!=targets[0].checksum)
+            throw std::runtime_error("nondeterministic replay");
+        fixed_times.push_back(fixed[i].ns_step);
+        target_times.push_back(targets[i].milliseconds);
     }
-    std::sort(times.begin(), times.end());
-    return {times[times.size()/2u], measurements.front().final_loss};
+    return {median(fixed_times),fixed[0].final_loss,targets[0].reached,
+            targets[0].steps,median(target_times),targets[0].final_loss};
 }
 
 bool help_requested(List<String> const& args) {
@@ -234,82 +330,105 @@ bool help_requested(List<String> const& args) {
 
 int main(int argc, char const* argv[]) {
     using namespace Ariadne;
-    // ThreadManager installs the logging thread registry; default concurrency
-    // is zero. The M4 optimizer implementation itself is sequential.
     ThreadManager::instance();
     Logger::instance().configuration().set_verbosity(1u);
     try {
-        Options selection;
+        Options options;
         ThreadingCommandLineInterface cli;
-        cli.add(CommandLineContribution("neural-optimizer-benchmark", parsers(selection)));
+        cli.add(CommandLineContribution("neural-optimizer-benchmark",parsers(options)));
         List<String> arguments;
-        for (int i = 0; i < argc; ++i) arguments.append(String(argv[i]));
-        if (!cli.acquire(arguments)) return help_requested(arguments) ? 0 : 1;
-        if (ThreadManager::instance().concurrency() != 0u)
+        for(int i=0;i<argc;++i) arguments.append(String(argv[i]));
+        if(!cli.acquire(arguments)) return help_requested(arguments) ? 0 : 1;
+        if(ThreadManager::instance().concurrency()!=0u)
             throw std::invalid_argument(
-                "NativeCpu M4 training is sequential: use --concurrency 0");
+                "NativeCpu training is sequential: use --concurrency 0");
 
-        auto workload = make_workload(selection);
-        NeuralTrainingSession baseline(workload.initial, NeuralOptimizerOptions{});
-        const double initial_loss = baseline.loss_batch(workload.inputs, workload.targets);
-        std::vector<Measurement> sgd_measurements, adamw_measurements;
-        sgd_measurements.reserve(selection.samples);
-        adamw_measurements.reserve(selection.samples);
-
-        LOGGING_PRINTLN("Ariadne Neural | NativeCpu SGD vs AdamW end-to-end training")
-        LOGGING_PRINTLN("Network: 8 -> " << selection.hidden_width << " (Tanh) -> 1 (Identity)"
-            << " | batch=" << selection.batch_size << " | steps=" << selection.iterations
-            << " | samples=" << selection.samples << " + warm-up"
-            << " | seed=" << selection.seed)
-        LOGGING_PRINTLN("Sequential execution: concurrency=0, MSE (mean over samples)")
-        LOGGING_PRINTLN("SGD lr=" << selection.sgd_rate << " momentum=" << selection.momentum
-            << " | AdamW lr=" << selection.adamw_rate
-            << " | weight decay=" << selection.weight_decay)
-        LOGGING_PRINTLN("Initial shared loss: " << std::setprecision(10) << initial_loss)
-
-        // Each sample starts from precisely the same immutable model and data.
-        // Sample zero is a full untimed warm-up; alternate the order of both
-        // measured implementations to reduce sequential order bias.
-        for (unsigned sample = 0u; sample <= selection.samples; ++sample) {
-            const bool sgd_first = (sample % 2u) == 0u;
-            const auto first = run_once(workload, selection,
-                sgd_first ? NeuralOptimizerKind::Sgd : NeuralOptimizerKind::AdamW);
-            const auto second = run_once(workload, selection,
-                sgd_first ? NeuralOptimizerKind::AdamW : NeuralOptimizerKind::Sgd);
-            if (sample != 0u) {
-                sgd_measurements.push_back(sgd_first ? first : second);
-                adamw_measurements.push_back(sgd_first ? second : first);
+        constexpr Variant variants[] = {Variant::Sgd,Variant::SgdMomentum,Variant::AdamW};
+        constexpr std::size_t count=3u;
+        struct Aggregate {
+            std::vector<double> fixed_times,target_times;
+            unsigned hits=0u;
+        };
+        Aggregate aggregates[count];
+        LOGGING_PRINTLN("Ariadne Neural | SGD, SGD+momentum, AdamW")
+        LOGGING_PRINTLN("Network 8 -> " << options.hidden_width << " Tanh -> 1 Identity"
+            << " | batch=" << options.batch_size << " | paired seeds=" << options.seeds
+            << " | samples=" << options.samples << " + warm-up"
+            << " | fixed steps=" << options.iterations
+            << " | target budget=" << options.max_steps)
+        LOGGING_PRINTLN("Loss = 0.5 * sum squared output errors, averaged over samples")
+        LOGGING_PRINTLN("Target <= " << options.target_loss << " | SGD lr=" << options.sgd_rate
+            << " | momentum=" << options.momentum << " | AdamW lr=" << options.adamw_rate
+            << " | decay=" << options.weight_decay)
+        LOGGING_PRINTLN("Fixed-step timing excludes repeated loss checks;"
+            " time-to-target timing includes post-step checks.")
+        for(unsigned si=0u;si<options.seeds;++si) {
+            Options seeded=options;
+            seeded.seed += static_cast<std::uint64_t>(si);
+            auto w=make_workload(seeded);
+            NeuralTrainingSession baseline(w.initial,NeuralOptimizerOptions{});
+            const double initial_loss=baseline.loss_batch(w.inputs,w.targets);
+            std::vector<Fixed> fixed[count];
+            std::vector<Target> target[count];
+            for(unsigned sample=0u;sample<=options.samples;++sample) {
+                for(std::size_t offset=0u;offset<count;++offset) {
+                    const std::size_t k=(offset+static_cast<std::size_t>(sample)
+                        +static_cast<std::size_t>(si))%count;
+                    const auto f=time_steps(w,options,variants[k]);
+                    const auto t=time_to_target(w,options,variants[k]);
+                    if(sample>0u) {
+                        fixed[k].push_back(f);
+                        target[k].push_back(t);
+                    }
+                }
+            }
+            LOGGING_PRINTLN(std::string(95u,'='))
+            LOGGING_PRINTLN("Seed=" << seeded.seed << " | initial loss="
+                << std::setprecision(10) << initial_loss)
+            LOGGING_PRINTLN(std::left << std::setw(16) << "Optimizer" << std::right
+                << std::setw(14) << "ns/step" << std::setw(16) << "fixed loss"
+                << std::setw(14) << "target step" << std::setw(17) << "target ms"
+                << std::setw(18) << "last loss")
+            for(std::size_t k=0u;k<count;++k) {
+                const Summary x=summarize(fixed[k],target[k]);
+                aggregates[k].fixed_times.push_back(x.ns_step);
+                if(x.reached) {
+                    ++aggregates[k].hits;
+                    aggregates[k].target_times.push_back(x.target_ms);
+                }
+                LOGGING_PRINTLN(std::left << std::setw(16) << name(variants[k])
+                    << std::right << std::fixed << std::setprecision(3)
+                    << std::setw(14) << x.ns_step
+                    << std::setw(16) << std::setprecision(9) << x.final_loss
+                    << std::setw(14) << (x.reached ? std::to_string(x.steps)
+                        : ">" + std::to_string(options.max_steps))
+                    << std::setw(17) << (x.reached ? std::to_string(x.target_ms)
+                        : std::string("censored"))
+                    << std::setw(18) << x.last_loss)
             }
         }
-
-        const auto sgd = summarize(sgd_measurements);
-        const auto adamw = summarize(adamw_measurements);
-        LOGGING_PRINTLN(std::string(74u, '='))
-        LOGGING_PRINTLN(std::left << std::setw(12) << "Optimizer"
-            << std::right << std::setw(20) << "Median ns/step"
-            << std::setw(21) << "Final MSE" << std::setw(19) << "Steps")
-        LOGGING_PRINTLN(std::string(74u, '-'))
-        LOGGING_PRINTLN(std::left << std::setw(12) << "SGD"
-            << std::right << std::fixed << std::setprecision(3)
-            << std::setw(20) << sgd.median_ns_step
-            << std::setw(21) << std::setprecision(10) << sgd.final_loss
-            << std::setw(19) << selection.iterations)
-        LOGGING_PRINTLN(std::left << std::setw(12) << "AdamW"
-            << std::right << std::fixed << std::setprecision(3)
-            << std::setw(20) << adamw.median_ns_step
-            << std::setw(21) << std::setprecision(10) << adamw.final_loss
-            << std::setw(19) << selection.iterations)
-        LOGGING_PRINTLN(std::string(74u, '='))
-        LOGGING_PRINTLN("AdamW / SGD time per step: " << std::setprecision(3)
-            << adamw.median_ns_step / sgd.median_ns_step << "x (>1 is slower)")
-        LOGGING_PRINTLN("Time includes forward, loss, backpropagation, optimizer and"
-            " state/snapshot updates; excludes model/data setup and initial/final loss checks.")
-        LOGGING_PRINTLN("This is fixed-step progress, NOT a matched-quality or"
-            " time-to-accuracy comparison. Different learning rates are configurable.")
-        LOGGING_PRINTLN("No performance threshold is enforced in CI.")
+        LOGGING_PRINTLN(std::string(95u,'='))
+        LOGGING_PRINTLN("Medians across paired seeds (unreached target runs are censored)")
+        for(std::size_t k=0u;k<count;++k) {
+            auto const& a=aggregates[k];
+            LOGGING_PRINTLN(name(variants[k]) << ": median fixed-step time "
+                << std::fixed << std::setprecision(3) << median(a.fixed_times)
+                << " ns/step | target reached " << a.hits << "/" << options.seeds)
+            if(a.hits==options.seeds) {
+                LOGGING_PRINTLN("  median time-to-target across seeds = "
+                    << std::setprecision(3) << median(a.target_times) << " ms")
+            } else {
+                LOGGING_PRINTLN("  time-to-target aggregate not reported"
+                    " because some paired runs were censored.")
+            }
+        }
+        LOGGING_PRINTLN("Every trial restarts from the same seeded model/data;"
+            " algorithm order rotates; a warm-up is excluded.")
+        LOGGING_PRINTLN("Time-to-target includes loss evaluations after every update;"
+            " fixed-step timing does not. No CI speed or convergence threshold.")
         return 0;
-    } catch (std::exception const& error) {
-        LOGGING_PRINTLN("benchmark_optimizers: " << error.what())
+    } catch(std::exception const& e) {
+        LOGGING_PRINTLN("benchmark_optimizers: " << e.what())
         return 1;
     }
 }

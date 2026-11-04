@@ -734,6 +734,23 @@ compare against this baseline using matched workloads and document
 hardware, build type, compiler and scheduler settings. No new
 production dependency, Neural API, or backend is introduced.
 
+**M4 comparison extension (2026-11-04; implemented, CI pending):**
+The benchmark now separates two observables: fixed-update cost (timed
+training without additional loss evaluations) and first-passage time to
+reach a user-specified half-squared-error threshold (including a loss
+evaluation after each update). It compares SGD without momentum, SGD with
+classical momentum and AdamW on exactly paired seeds and fixed batches.
+`--max-steps` is a censoring horizon, not a convergence guarantee. Final
+loss and target attainment are always reported; aggregate median
+time-to-target is suppressed when any paired seed fails. This avoids
+survivor-only timing statistics misrepresenting the result.
+The `--seeds` option enumerates consecutive deterministic seeds; fixed
+optimizer options are held across seeds, so this is *not* a hyperparameter
+sweep. Repeatable initialized snapshots, warm-ups, trial order rotation
+and replay checks are retained. The workload remains sequential and
+nonvalidated. No matched-accuracy or hardware superiority claim is
+established by implementation alone.
+
 ### M5 — Persistence, freezing, and transfer learning
 
 **Deliverables:** Backend-neutral versioned canonical JSON manifest plus
@@ -864,6 +881,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
+| 2026-11-04 | M4 optimizer time-to-target benchmark | Implemented; CI pending | Added three-way SGD, SGD with momentum, AdamW comparison with paired seeded workloads, fixed-step median timings and a separate first-passage time-to-target experiment. Each target run includes per-update loss checks; failures to reach the requested loss within max steps are explicitly censored, and no aggregate target time is reported unless all seeds succeed. Added `--seeds`, `--target-loss`, `--max-steps`, updated CI smoke to use small budgets, and revised README. Initial benchmark baseline had GCC Debug and sanitizer/coverage failures; these require separate diagnosis, not a weakening of this benchmark. |
 | 2026-11-03 | M4 benchmark standalone linkage | Fixed; CI pending | The initial macOS Release link failed with `ld: library 'ariadne-threading' not found`. In a standalone Neural build `setup_project_library()` bundles all transitive Threading/Logging object targets into `ariadne-neural`; no independent `ariadne-threading` or `ariadne-logging` target exists. Linked `benchmark_optimizers` only to `ariadne-neural` and the existing `neural` interface, and removed invalid Windows CTest target-file-directory references. No change to benchmark workload, algorithms or performance thresholds. Recheck Release link and Debug smoke on CI. |
 | 2026-11-03 | M4 comparative optimizer benchmark | Implemented; CI pending | Added standalone SGD-versus-AdamW sequential end-to-end training benchmark with ThreadingCommandLineInterface, logger-backed reporting, strict options, repeated warm-up/median measurements, same seeded initial model/data, alternating order, fixed-step final MSE and deterministic replay checks. Added CMake benchmarks target and Debug CI smoke with no speed thresholds; README and benchmark contract updated. Does not claim parallel execution or optimizer superiority. |
 | 2026-11-03 | M4 frozen-session capability contract | Fixed; CI pending | Debug Python CTest on Ubuntu/macOS/Windows exposed two expectations that frozen NeuralExecutionSession rejects Training. M4 had incorrectly made its per-session supports()/require() accept Training merely because backend-wide NativeCpu supports it. Restored the intended distinction: neural_backend_supports(NativeCpu, Training) remains true, while frozen sessions reject Training and only mutable NeuralTrainingSession performs updates. Added both sides of this contract to C++ and Python assertions; no training algorithm, numerical oracle, or coverage removed. |
