@@ -37,6 +37,8 @@ from pyariadne import (
     neural_version,
     neural_save_snapshot,
     neural_load_snapshot,
+    neural_save_training_checkpoint,
+    neural_load_training_checkpoint,
     neural_snapshot_sha256,
     neural_initialize_parameters,
     neural_replace_output_head,
@@ -74,6 +76,10 @@ if __name__ == "__main__":
         restored = neural_load_snapshot(manifest, tensors)
         print("Reloaded parameter count:", restored.network().parameter_count())
         print("Snapshot SHA-256:", neural_snapshot_sha256(restored))
+        optimizer_file = str(Path(directory) / "optimizer.safetensors")
+        neural_save_training_checkpoint(trainer, manifest, tensors, optimizer_file)
+        resumed = neural_load_training_checkpoint(manifest, tensors, optimizer_file)
+        print("Recovered optimizer steps:", resumed.steps())
 
     # Fine-tune a new output head while retaining the trained feature layer.
     features = NeuralNetwork(1, [

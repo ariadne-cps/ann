@@ -47,9 +47,11 @@ public:
     struct Files {
         std::string json = "test_neural_m5_manifest.json";
         std::string weights = "test_neural_m5_weights.safetensors";
+        std::string optimizer = "test_neural_m5_optimizer.safetensors";
         ~Files() {
             (void)std::remove(json.c_str());
             (void)std::remove(weights.c_str());
+            (void)std::remove(optimizer.c_str());
         }
     };
 
@@ -71,6 +73,78 @@ public:
         if (!output) throw std::runtime_error("Cannot write test fixture");
         output.write(bytes.data(),static_cast<std::streamsize>(bytes.size()));
         if (!output) throw std::runtime_error("Cannot write test fixture");
+    }
+
+    void test_training_checkpoint_resume_and_corruption() {
+        for (auto kind : {NeuralOptimizerKind::Sgd,NeuralOptimizerKind::AdamW}) {
+            Files files;
+            NeuralOptimizerOptions options;
+            options.kind=kind;
+            options.learning_rate=0.02;
+            options.weight_decay=0.15;
+            if (kind==NeuralOptimizerKind::Sgd) options.momentum=0.7;
+            NeuralTrainingSession uninterrupted(model(),options,
+                NeuralLossKind::MeanSquaredError,{false,true});
+            NeuralTrainingSession paused(model(),options,
+                NeuralLossKind::MeanSquaredError,{false,true});
+            for (unsigned i=0u;i<3u;++i) {
+                (void)uninterrupted.train_batch({{0.2,0.4}},{{0.6}});
+                (void)paused.train_batch({{0.2,0.4}},{{0.6}});
+            }
+            neural_save_training_checkpoint(
+                paused,files.json,files.weights,files.optimizer);
+            auto resumed=neural_load_training_checkpoint(
+                files.json,files.weights,files.optimizer);
+            ARIADNE_TESTING_EXPECT_EQUAL(resumed.steps(),std::size_t{3});
+            ARIADNE_TESTING_PROVE(resumed.trainable_layers() ==
+                                  std::vector<bool>({false,true}));
+            const auto restored_state=resumed.export_checkpoint();
+            ARIADNE_TESTING_PROVE(
+                restored_state.first_moment==paused.export_checkpoint().first_moment);
+            ARIADNE_TESTING_PROVE(
+                restored_state.second_moment==paused.export_checkpoint().second_moment);
+            for (unsigned i=0u;i<5u;++i) {
+                (void)uninterrupted.train_batch({{0.2,0.4}},{{0.6}});
+                (void)resumed.train_batch({{0.2,0.4}},{{0.6}});
+            }
+            ARIADNE_TESTING_EXPECT_EQUAL(resumed.steps(),std::size_t{8});
+            ARIADNE_TESTING_PROVE(
+                resumed.export_snapshot().values() ==
+                uninterrupted.export_snapshot().values());
+            ARIADNE_TESTING_PROVE(
+                resumed.export_checkpoint().first_moment ==
+                uninterrupted.export_checkpoint().first_moment);
+            ARIADNE_TESTING_PROVE(
+                resumed.export_checkpoint().second_moment ==
+                uninterrupted.export_checkpoint().second_moment);
+
+            // Mutate one finite moment byte; topology and lengths remain valid.
+            const auto original=file(files.optimizer);
+            std::uint64_t header=0u;
+            for (unsigned i=0u;i<8u;++i)
+                header |= static_cast<std::uint64_t>(
+                    static_cast<unsigned char>(original[i])) << (i*8u);
+            const auto payload=8u+static_cast<std::size_t>(header);
+            auto changed=original;
+            changed[payload] = static_cast<char>(
+                static_cast<unsigned char>(changed[payload])^1u);
+            write(files.optimizer,changed);
+            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                (void)neural_load_training_checkpoint(
+                    files.json,files.weights,files.optimizer));
+            write(files.optimizer,original);
+            // Another perfectly valid model snapshot cannot be paired
+            // with an optimizer state belonging to the original model.
+            const auto current=paused.export_snapshot();
+            auto different=current.export_values();
+            different[0]+=0.125;
+            neural_save_snapshot(
+                NeuralParameterSnapshot(current.network(),different),
+                files.json,files.weights);
+            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                (void)neural_load_training_checkpoint(
+                    files.json,files.weights,files.optimizer));
+        }
     }
 
     void test_exact_binary64_roundtrip() {
@@ -245,6 +319,7 @@ public:
 
 int main(int argc,char** argv) {
     ARIADNE_TESTING_SUITE("serialization");
+    ARIADNE_TESTING_ADD_TEST(TestSerialization,test_training_checkpoint_resume_and_corruption);
     ARIADNE_TESTING_ADD_TEST(TestSerialization,test_exact_binary64_roundtrip);
     ARIADNE_TESTING_ADD_TEST(TestSerialization,test_sha256_standard_vectors);
     ARIADNE_TESTING_ADD_TEST(TestSerialization,test_sha256_semantics);

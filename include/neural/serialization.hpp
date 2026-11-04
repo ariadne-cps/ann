@@ -29,6 +29,7 @@
 #define ARIADNE_NEURAL_SERIALIZATION_HPP
 
 #include "neural/network.hpp"
+#include "neural/training.hpp"
 #include <string>
 
 namespace Ariadne {
@@ -75,6 +76,28 @@ void neural_save_snapshot(NeuralParameterSnapshot const& snapshot,
 NeuralParameterSnapshot neural_load_snapshot(
     std::string const& manifest_path,
     std::string const& safetensors_path);
+
+/** @brief Save model files and a separate optimizer-state Safetensors file.
+ *
+ *  The third file stores optimizer moments as F64 and strict metadata
+ *  specifying loss, hyperparameters, frozen layers, step count and hashes.
+ *  All three paths must be distinct; publication is NOT atomic.
+ */
+void neural_save_training_checkpoint(
+    NeuralTrainingSession const& session,
+    std::string const& manifest_path,
+    std::string const& safetensors_path,
+    std::string const& optimizer_path);
+
+/** @brief Recover exact native-CPU optimizer state and frozen model.
+ *
+ *  Requires the model snapshot hash and independent optimizer state hash
+ *  to agree. Does not load untrusted executable or pickle data.
+ */
+NeuralTrainingSession neural_load_training_checkpoint(
+    std::string const& manifest_path,
+    std::string const& safetensors_path,
+    std::string const& optimizer_path);
 
 } // namespace Ariadne
 

@@ -823,8 +823,9 @@ supported current schema, with no manifest version field and no backward
 compatibility with earlier checkpoints. The digest is a content identifier,
 not a signature, provenance claim or authentication; replacing both files
 and recomputing the digest is not prevented. Atomic publication,
-optimizer-state checkpointing and persistent freeze masks remain separate
-M5 work. ONNX remains the agreed, later portability
+optimizer-state checkpointing and persistent freeze masks are implemented
+only in the separate native CPU training-checkpoint artifact, not in the
+two-file model snapshot. Atomic publication remains separate M5 work. ONNX remains the agreed, later portability
 interface and is not implemented by this slice. No validation or
 interval enclosure is implied by successful loading.
 
@@ -870,11 +871,53 @@ This is not a generic internal layer surgery API.
 A new training session (possibly with an unfrozen mask) is built from
 the exported snapshot. Optimizer moments and step counters are reset
 rather than silently transferred between different model topologies or
-trainability policies. Optimizer-state serialization, per-parameter
-rather than per-layer masks, persistent freeze metadata, cryptographic
-model identity and atomic two-file checkpoints remain M5 work.
-Neither snapshots nor serialization store the training mask.
+trainability policies. Optimizer-state serialization and persistent freeze metadata are now
+supported only in a separate three-file training checkpoint; model-only
+snapshots remain free of optimizer/mask details. Per-parameter rather
+than per-layer masks, authenticated provenance and atomic multi-file
+publication remain open. Model SHA-256 identity is already available.
 Replacing any parameter invalidates prior model-specific certificates.
+
+### M5 native CPU training state checkpoint (2026-11-04)
+
+**Implementation status: implemented, full CI pending.** The
+`NeuralTrainingCheckpoint` contains a frozen snapshot, optimizer options,
+loss kind, per-layer trainability mask, first and second moment arrays and
+completed update count. `NeuralTrainingSession::export_checkpoint()` exposes
+a value copy, and constructing a session from that value restores its state
+after validating dimensions, finiteness, nonnegative AdamW second moments,
+and that frozen parameters have zero optimizer moments. A fresh session
+from a model-only snapshot still starts with zero moments and step count.
+
+`neural_save_training_checkpoint(session, manifest, weights, optimizer)`
+writes the existing model JSON/Safetensors pair and a third standard
+Safetensors file. The third file stores two F64 arrays named
+`first_moment` and `second_moment`, with string-valued Safetensors
+`__metadata__` containing the loss, optimizer algorithm, hyperparameters
+encoded as exact 16-character lowercase binary64 hex, step count,
+trainable-layer bitmask, frozen model `snapshot_sha256` and the
+training-state `checkpoint_sha256`. The training-state digest hashes
+a domain-separated canonical byte stream containing the model digest,
+algorithm, loss, all hyperparameters, step count, trainable mask and exact
+moment bits; each integer is little-endian u64. This is a single current
+format and intentionally has no schema version negotiation.
+
+`neural_load_training_checkpoint` rejects malformed schemas, mismatched
+model identities, altered finite moments, invalid numeric options,
+nonfinite moments, wrong tensor offsets/shapes and malformed masks.
+Independent C++ and Python replay tests compare resumed SGD-momentum and
+AdamW trajectories with uninterrupted training, including frozen layers,
+and reject finite payload corruption and same-shaped model swaps.
+Both language tutorials demonstrate restoring optimizer steps.
+
+**Limitations:** The three-file write is not an atomic transaction and may
+leave a partial checkpoint after an I/O error. All three files must be
+published together. The digests provide content integrity against
+accidental corruption, not authentication against a malicious writer
+who controls both files and digests. Checkpoints encode the native CPU
+optimizer state, not arbitrary third-party backends; RNG state for external
+data shuffling or training schedule is not recorded. No additional
+runtime/cryptography dependency is introduced.
 
 ### M6 — Validated inference and numerical enclosures
 
@@ -988,6 +1031,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
+| 2026-11-04 | M5 resumable native CPU optimizer checkpoints | Implemented; full CI pending | Added NeuralTrainingCheckpoint and native session export/restore preserving SGD momentum or AdamW first/second moments, optimizer options, loss, layer trainability and update counter. Added separate optimizer Safetensors file with exact F64 moments, strict metadata and SHA-256 digest bound to the model snapshot; loader rejects mismatched files and tampering. Added C++/Python deterministic replay and corruption tests plus both tutorials, README and design documentation. No new dependencies; three-file persistence is non-atomic, not authenticated, and external data-stream RNG state is not captured. |
 | 2026-11-04 | Coverage CI: Codecov token check and report upload | Implemented; CI pending | Restored missing Codecov upload in Neural Coverage workflow, following Threading: macOS job checks `secrets.CODECOV_TOKEN` and fails explicitly when unavailable, then uploads `${{ runner.workspace }}/build/coverage.info` using codecov/codecov-action@v7.1.1 with disable_search, fail_ci_if_error and verbose enabled. Ubuntu/macOS continue generating coverage; only macOS uploads. Secret presence and external Codecov receipt cannot be verified from repository contents and require workflow execution; fork PRs without secrets will fail macOS by design. |\n| 2026-11-04 | M5 SHA-256 header/source separation | Implemented; CI pending | Split SHA-256 helper into declaration include/neural/sha256.hpp and implementation src/sha256.cpp, removed src/sha256.hpp, updated serialization include and NEURAL_SRC source list. Preserved the existing FIPS 180-4 hashing algorithm, canonical model digest and no external crypto dependencies. Added direct SHA-256 known-answer tests (empty, incremental abc, 1,000,000 a) to C++ serialization suite. Previous SHA snapshot commit had five green workflows; cross-platform CI of this refactor pending. |\n| 2026-11-04 | M5 canonical snapshot SHA-256 and current-only manifest | Implemented; CI pending | Removed manifest version field rather than introducing v1/v2 compatibility; required SHA-256 digest over canonical topology, activation tags and exact binary64 parameters. Added C++ and Python API neural_snapshot_sha256, FIPS SHA-256 implementation, same-shaped finite payload tamper detection, signed-zero identity checks and independent Python hashlib reference. Legacy manifests without digest intentionally rejected. Two-file publication remains non-atomic; no signature/authentication or optimizer-state checkpoint. |
 | 2026-11-04 | M5 per-layer freezing, output head replacement and fine-tuning | Implemented; CI pending | Added optional per-layer trainable mask to native CPU training and explicit rejection of zero trainable layers or malformed masks; SGD momentum/decay and AdamW update only trainable parameters, preserving frozen binary64 values exactly. Added seeded output head replacement preserving all preceding layers bit-for-bit, independent optimizer state for fine-tuning, C++/Python tests and tutorials. No serialization of trainable masks, optimizer states, cryptographic identity or ONNX. |
 | 2026-11-04 | Fix JSON field error text after C-string key change | Implemented; CI pending | Corrected compile error in serialization parser: after changing field() key type to const char* for GCC 13 -Wdangling-reference, the missing-field exception attempted to add two C-string pointers. Explicitly construct std::string before concatenating the key. Previously published intermediate commit c0f6964 had build failures across compiler configurations; preserve this regression record and verify all workflow builds on the updated commit. |

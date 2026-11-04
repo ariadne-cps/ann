@@ -188,6 +188,30 @@ NeuralTrainingSession::NeuralTrainingSession(
     }
 }
 
+NeuralTrainingSession::NeuralTrainingSession(NeuralTrainingCheckpoint checkpoint)
+    : NeuralTrainingSession(std::move(checkpoint.snapshot),
+                            checkpoint.options,
+                            checkpoint.loss,
+                            std::move(checkpoint.trainable_layers)) {
+    const std::size_t count = snapshot_.network().parameter_count();
+    if (checkpoint.first_moment.size() != count ||
+        checkpoint.second_moment.size() != count)
+        throw std::invalid_argument("Wrong neural optimizer state dimension");
+    for (std::size_t i = 0; i < count; ++i) {
+        const double first = checkpoint.first_moment[i];
+        const double second = checkpoint.second_moment[i];
+        if (!std::isfinite(first) || !std::isfinite(second) ||
+            (options_.kind == NeuralOptimizerKind::AdamW && second < 0.0) ||
+            (!trainable_parameters_[i] && (first != 0.0 || second != 0.0)) ||
+            (options_.kind == NeuralOptimizerKind::Sgd && second != 0.0) ||
+            (checkpoint.steps == 0 && (first != 0.0 || second != 0.0)))
+            throw std::invalid_argument("Invalid neural optimizer moment state");
+    }
+    first_moment_ = std::move(checkpoint.first_moment);
+    second_moment_ = std::move(checkpoint.second_moment);
+    steps_ = checkpoint.steps;
+}
+
 std::size_t NeuralTrainingSession::steps() const noexcept { return steps_; }
 
 std::vector<bool> const& NeuralTrainingSession::trainable_layers() const noexcept {
@@ -196,6 +220,11 @@ std::vector<bool> const& NeuralTrainingSession::trainable_layers() const noexcep
 
 NeuralParameterSnapshot NeuralTrainingSession::export_snapshot() const {
     return snapshot_;
+}
+
+NeuralTrainingCheckpoint NeuralTrainingSession::export_checkpoint() const {
+    return {snapshot_, options_, loss_, trainable_layers_,
+            first_moment_, second_moment_, steps_};
 }
 
 double NeuralTrainingSession::loss_batch(

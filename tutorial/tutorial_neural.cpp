@@ -87,6 +87,12 @@ int main() {
               << " | preserved feature weight: "
               << (fine_tuning.export_snapshot().values().at(0) == preserved_prefix)
               << '\n';
+    // Persist the complete optimizer state, then restore a resumable session.
+    const std::string optimizer_state=prefix.string()+".optimizer.safetensors";
+    neural_save_training_checkpoint(trainer,manifest,tensors,optimizer_state);
+    auto resumed=neural_load_training_checkpoint(manifest,tensors,optimizer_state);
+    std::cout << "Recovered optimizer steps: " << resumed.steps() << '\n';
+    (void)std::remove(optimizer_state.c_str());
     (void)std::remove(manifest.c_str());
     (void)std::remove(tensors.c_str());
     return 0;

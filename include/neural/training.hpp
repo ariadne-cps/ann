@@ -59,6 +59,23 @@ struct NeuralOptimizerOptions {
     double epsilon = 1e-8; ///< AdamW positive denominator offset.
 };
 
+/** @brief Immutable-by-convention complete native-CPU training state.
+ *
+ *  Holds model snapshot, optimizer hyperparameters, loss, trainability policy,
+ *  completed optimizer step count, and exact moment buffer values. Import
+ *  through NeuralTrainingSession to enforce consistency. This is a value
+ *  representation, not a certificate of training provenance.
+ */
+struct NeuralTrainingCheckpoint {
+    NeuralParameterSnapshot snapshot;
+    NeuralOptimizerOptions options;
+    NeuralLossKind loss;
+    std::vector<bool> trainable_layers;
+    std::vector<double> first_moment;
+    std::vector<double> second_moment;
+    std::size_t steps;
+};
+
 /** @brief CPU mutable workspace, independent of all imported frozen snapshots.
  *
  *  Every training step processes a nonempty rectangular batch sequentially,
@@ -84,12 +101,21 @@ public:
                           NeuralLossKind loss = NeuralLossKind::MeanSquaredError,
                           std::vector<bool> trainable_layers = {});
 
+    /** @brief Restore an entire checkpoint, including optimizer moments.
+     *  Rejects malformed dimensions, nonfinite moments, invalid optimizer
+     *  settings, and nonzero moments for frozen parameters. In particular,
+     *  this is distinct from constructing a fresh session from a snapshot.
+     */
+    explicit NeuralTrainingSession(NeuralTrainingCheckpoint checkpoint);
+
     /** @brief Number of completed optimizer steps, not training examples. */
     std::size_t steps() const noexcept;
     /** @brief Per-layer update mask (true means trainable). */
     std::vector<bool> const& trainable_layers() const noexcept;
     /** @brief Export a new, independent, immutable parameter snapshot. */
     NeuralParameterSnapshot export_snapshot() const;
+    /** @brief Export the complete optimizer state for exact resumption. */
+    NeuralTrainingCheckpoint export_checkpoint() const;
     /** @brief Calculate sample-mean objective without updating anything. */
     double loss_batch(std::vector<std::vector<double>> const& inputs,
                       std::vector<std::vector<double>> const& targets) const;

@@ -35,6 +35,12 @@ from pyariadne import (
     NeuralExecutionSession,
     NeuralNetwork,
     NeuralParameterSnapshot,
+    NeuralOptimizerKind,
+    NeuralOptimizerOptions,
+    NeuralLossKind,
+    NeuralTrainingSession,
+    neural_load_training_checkpoint,
+    neural_save_training_checkpoint,
     neural_load_snapshot,
     neural_save_snapshot,
     neural_snapshot_sha256,
@@ -191,3 +197,54 @@ def test_identity_matches_independent_hashlib_reference():
     bits_changed[1] = 0.0
     assert neural_snapshot_sha256(
         NeuralParameterSnapshot(model, bits_changed)) != neural_snapshot_sha256(snapshot)
+
+
+@pytest.mark.parametrize("optimizer", [NeuralOptimizerKind.Sgd, NeuralOptimizerKind.AdamW])
+def test_training_checkpoint_exact_resume_and_integrity(tmp_path, optimizer):
+    snapshot = make_snapshot()
+    options = NeuralOptimizerOptions()
+    options.kind = optimizer
+    options.learning_rate = 0.02
+    options.weight_decay = 0.15
+    if optimizer == NeuralOptimizerKind.Sgd:
+        options.momentum = 0.7
+    reference = NeuralTrainingSession(
+        snapshot, options, NeuralLossKind.MeanSquaredError, [False, True])
+    paused = NeuralTrainingSession(
+        snapshot, options, NeuralLossKind.MeanSquaredError, [False, True])
+    samples, targets = [[0.2, 0.4]], [[0.6]]
+    for _ in range(3):
+        reference.train_batch(samples, targets)
+        paused.train_batch(samples, targets)
+    manifest = str(tmp_path / "model.json")
+    tensors = str(tmp_path / "model.safetensors")
+    moments = str(tmp_path / "optimizer.safetensors")
+    neural_save_training_checkpoint(paused, manifest, tensors, moments)
+    resumed = neural_load_training_checkpoint(manifest, tensors, moments)
+    assert resumed.steps() == 3
+    assert resumed.trainable_layers() == [False, True]
+    assert resumed.export_checkpoint().first_moment == paused.export_checkpoint().first_moment
+    assert resumed.export_checkpoint().second_moment == paused.export_checkpoint().second_moment
+    for _ in range(5):
+        reference.train_batch(samples, targets)
+        resumed.train_batch(samples, targets)
+    assert resumed.export_snapshot().values() == reference.export_snapshot().values()
+    assert resumed.export_checkpoint().first_moment == reference.export_checkpoint().first_moment
+    assert resumed.export_checkpoint().second_moment == reference.export_checkpoint().second_moment
+
+    # Tamper with a finite optimizer-state value without changing its shape.
+    data = bytearray((tmp_path / "optimizer.safetensors").read_bytes())
+    headlen = struct.unpack("<Q", data[:8])[0]
+    data[8 + headlen] ^= 1
+    (tmp_path / "optimizer.safetensors").write_bytes(data)
+    with pytest.raises(ValueError):
+        neural_load_training_checkpoint(manifest, tensors, moments)
+    # Restore the legitimate checkpoint and swap its model with a different
+    # valid model of exactly the same tensor dimensions.
+    neural_save_training_checkpoint(paused, manifest, tensors, moments)
+    altered = snapshot.values()
+    altered[0] += 0.125
+    neural_save_snapshot(NeuralParameterSnapshot(snapshot.network(), altered),
+                         manifest, tensors)
+    with pytest.raises(ValueError):
+        neural_load_training_checkpoint(manifest, tensors, moments)

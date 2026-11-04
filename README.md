@@ -18,7 +18,8 @@ Supported layer activations are identity, ReLU, tanh, sigmoid and softplus.
 Fine-tuning supports per-layer trainability masks (with exact freezing of
 unchanged parameters for SGD and AdamW) and deterministic replacement of the
 final dense output head. A new training session resets optimizer state; masks
-and optimizer state are not saved in JSON/Safetensors checkpoints.
+are not saved in model-only snapshots. An optional three-file training
+checkpoint preserves the optimizer state and trainability mask.
 C++ and Python interfaces expose model metadata, parameter snapshots, backend
 capability queries, CPU inference, derivatives and training.
 
@@ -89,8 +90,30 @@ in [the design journal](doc/neural_design.md). File pairs must be published toge
 SHA-256 snapshot digest (exposed as `neural_snapshot_sha256`) binding topology,
 activations and exact binary64 parameter bits. The digest is a content
 identifier, not an authenticated signature. There is no legacy manifest
-version support, atomic two-file commit, optimizer-state checkpoint or ONNX
-import/export yet.
+version support, atomic two-file commit, ONNX import/export yet; optimizer state is stored separately
+in a three-file training checkpoint.
+
+## Resumable training checkpoints (M5)
+
+A model snapshot contains **only topology and frozen weights**. To resume a
+native CPU training session, save its complete optimizer state too:
+
+```python
+neural_save_training_checkpoint(
+    trainer, "model.json", "model.safetensors", "optimizer.safetensors")
+resumed = neural_load_training_checkpoint(
+    "model.json", "model.safetensors", "optimizer.safetensors")
+```
+
+The optimizer Safetensors file holds the F64 moment buffers and exact
+optimizer hyperparameters (binary64-encoded), loss, frozen-layer mask, step
+count, model digest and independent state SHA-256 digest. A resumed SGD
+momentum or AdamW session starts with the same update state rather than
+resetting the moments. The files must all belong to the same checkpoint;
+tampering and mix-and-match snapshots are rejected by hash checks, but hashes
+do not authenticate who created them. Publishing three files atomically is
+not supported. The checkpoint format is for the native CPU training
+implementation and has no external-backend interoperability guarantee.
 
 ## Performance benchmark
 

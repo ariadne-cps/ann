@@ -319,6 +319,119 @@ void verify_tensor(std::map<std::string,Json> const& tensors,
     offset = d.end;
 }
 
+std::string hex_bits(double value) {
+    constexpr char digits[] = "0123456789abcdef";
+    const std::uint64_t bits = std::bit_cast<std::uint64_t>(value);
+    std::string result(16u,'0');
+    for (unsigned i = 0; i < 16u; ++i)
+        result[i] = digits[(bits >> (4u*(15u-i))) & 0xfu];
+    return result;
+}
+
+std::uint64_t decode_hex(std::string const& value) {
+    if (value.size() != 16u)
+        throw std::invalid_argument("Wrong neural optimizer numeric encoding");
+    std::uint64_t n=0u;
+    for (char c : value) {
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+            throw std::invalid_argument("Invalid neural optimizer numeric encoding");
+        n = (n << 4u) | static_cast<std::uint64_t>(
+            c <= '9' ? c-'0' : c-'a'+10);
+    }
+    return n;
+}
+
+double decode_double(std::string const& value) {
+    return std::bit_cast<double>(decode_hex(value));
+}
+
+std::size_t decimal_size(std::string const& s) {
+    if (s.empty() || (s.size()>1u && s[0]=='0'))
+        throw std::invalid_argument("Invalid neural optimizer step count");
+    std::size_t result=0u;
+    for (char c : s) {
+        if (c<'0' || c>'9' ||
+            result > (std::numeric_limits<std::size_t>::max()
+                     -static_cast<unsigned>(c-'0'))/10u)
+            throw std::invalid_argument("Invalid neural optimizer step count");
+        result = result*10u + static_cast<unsigned>(c-'0');
+    }
+    return result;
+}
+
+std::string mask_text(std::vector<bool> const& mask) {
+    std::string result;
+    result.reserve(mask.size());
+    for (bool enabled : mask)
+        result.push_back(enabled ? '1' : '0');
+    return result;
+}
+
+std::vector<bool> parse_mask(std::string const& s, std::size_t layers) {
+    if (s.size()!=layers)
+        throw std::invalid_argument("Wrong neural training mask dimension");
+    std::vector<bool> result;
+    result.reserve(s.size());
+    for (char c : s) {
+        if (c!='0' && c!='1')
+            throw std::invalid_argument("Invalid neural training mask");
+        result.push_back(c=='1');
+    }
+    return result;
+}
+
+char const* optimizer_name(NeuralOptimizerKind kind) {
+    switch (kind) {
+        case NeuralOptimizerKind::Sgd: return "sgd";
+        case NeuralOptimizerKind::AdamW: return "adamw";
+        default: throw std::invalid_argument("Unknown neural optimizer kind");
+    }
+}
+
+NeuralOptimizerKind parse_optimizer(std::string const& name) {
+    if (name=="sgd") return NeuralOptimizerKind::Sgd;
+    if (name=="adamw") return NeuralOptimizerKind::AdamW;
+    throw std::invalid_argument("Unsupported neural optimizer kind");
+}
+
+char const* loss_name(NeuralLossKind kind) {
+    switch (kind) {
+        case NeuralLossKind::MeanSquaredError: return "mse";
+        case NeuralLossKind::BinaryCrossEntropyWithLogits: return "bce_logits";
+        default: throw std::invalid_argument("Unknown neural loss kind");
+    }
+}
+
+NeuralLossKind parse_loss(std::string const& name) {
+    if (name=="mse") return NeuralLossKind::MeanSquaredError;
+    if (name=="bce_logits") return NeuralLossKind::BinaryCrossEntropyWithLogits;
+    throw std::invalid_argument("Unsupported neural loss kind");
+}
+
+std::string training_sha256(NeuralTrainingCheckpoint const& checkpoint) {
+    Detail::Sha256 sha;
+    constexpr char domain[] = "ariadne-neural-training-state";
+    sha.update(std::string_view(domain,sizeof(domain)));
+    sha.update(neural_snapshot_sha256(checkpoint.snapshot));
+    sha.update_u64(checkpoint.options.kind==NeuralOptimizerKind::Sgd ? 0u : 1u);
+    sha.update_u64(checkpoint.loss==NeuralLossKind::MeanSquaredError ? 0u : 1u);
+    auto const& o = checkpoint.options;
+    for (double value : {o.learning_rate,o.momentum,o.weight_decay,
+                         o.beta1,o.beta2,o.epsilon})
+        sha.update_u64(std::bit_cast<std::uint64_t>(value));
+    sha.update_u64(static_cast<std::uint64_t>(checkpoint.steps));
+    sha.update_u64(static_cast<std::uint64_t>(checkpoint.trainable_layers.size()));
+    const auto mask=mask_text(checkpoint.trainable_layers);
+    sha.update(mask);
+    for (auto const& moment : {checkpoint.first_moment,checkpoint.second_moment}) {
+        sha.update_u64(static_cast<std::uint64_t>(moment.size()));
+        for (double value : moment)
+            sha.update_u64(std::bit_cast<std::uint64_t>(value));
+    }
+    return sha.hex_digest();
+}
+
+
 } // namespace
 
 std::string neural_snapshot_sha256(NeuralParameterSnapshot const& snapshot) {
@@ -469,6 +582,120 @@ NeuralParameterSnapshot neural_load_snapshot(
         saved_digest != neural_snapshot_sha256(snapshot))
         throw std::invalid_argument("Neural snapshot SHA-256 identity mismatch");
     return snapshot;
+}
+
+void neural_save_training_checkpoint(
+    NeuralTrainingSession const& session,
+    std::string const& manifest_path,
+    std::string const& safetensors_path,
+    std::string const& optimizer_path) {
+    if (optimizer_path.empty() || optimizer_path == manifest_path ||
+        optimizer_path == safetensors_path ||
+        manifest_path.empty() || safetensors_path.empty() ||
+        manifest_path == safetensors_path)
+        throw std::invalid_argument("Training checkpoint paths must be distinct");
+    auto checkpoint = session.export_checkpoint();
+    ensure_limit(checkpoint.snapshot.network());
+    const auto count=checkpoint.snapshot.network().parameter_count();
+    const auto byte_count=count*8u;
+    const auto& o=checkpoint.options;
+    std::string header = "{"__metadata__":{"format":"ariadne-neural-training","
+        ""snapshot_sha256":"" + neural_snapshot_sha256(checkpoint.snapshot) + "","
+        ""checkpoint_sha256":"" + training_sha256(checkpoint) + "","
+        ""optimizer":"" + optimizer_name(o.kind) + "","
+        ""loss":"" + loss_name(checkpoint.loss) + "","
+        ""steps":"" + std::to_string(checkpoint.steps) + "","
+        ""trainable_layers":"" + mask_text(checkpoint.trainable_layers) + "","
+        ""learning_rate":"" + hex_bits(o.learning_rate) + "","
+        ""momentum":"" + hex_bits(o.momentum) + "","
+        ""weight_decay":"" + hex_bits(o.weight_decay) + "","
+        ""beta1":"" + hex_bits(o.beta1) + "","
+        ""beta2":"" + hex_bits(o.beta2) + "","
+        ""epsilon":"" + hex_bits(o.epsilon) + ""},"
+        ""first_moment":{"dtype":"F64","shape":[" + std::to_string(count) +
+        "],"data_offsets":[0," + std::to_string(byte_count) + "]},"
+        ""second_moment":{"dtype":"F64","shape":[" + std::to_string(count) +
+        "],"data_offsets":[" + std::to_string(byte_count) + "," +
+        std::to_string(byte_count*2u) + "]}}";
+    if (header.size()>max_header_bytes)
+        throw std::invalid_argument("Training checkpoint header exceeds size limit");
+    std::string binary;
+    binary.reserve(8u+header.size()+byte_count*2u);
+    append64(binary,static_cast<std::uint64_t>(header.size()));
+    binary += header;
+    for (double value : checkpoint.first_moment)
+        append64(binary,std::bit_cast<std::uint64_t>(value));
+    for (double value : checkpoint.second_moment)
+        append64(binary,std::bit_cast<std::uint64_t>(value));
+    // Three files are individually written but not atomically published.
+    // The model+state identity checks detect cross-file mismatches on load.
+    neural_save_snapshot(checkpoint.snapshot,manifest_path,safetensors_path);
+    write_file(optimizer_path,binary);
+}
+
+NeuralTrainingSession neural_load_training_checkpoint(
+    std::string const& manifest_path,
+    std::string const& safetensors_path,
+    std::string const& optimizer_path) {
+    if (optimizer_path.empty() || optimizer_path == manifest_path ||
+        optimizer_path == safetensors_path ||
+        manifest_path.empty() || safetensors_path.empty() ||
+        manifest_path == safetensors_path)
+        throw std::invalid_argument("Training checkpoint paths must be distinct");
+    auto snapshot=neural_load_snapshot(manifest_path,safetensors_path);
+    auto const count=snapshot.network().parameter_count();
+    auto const binary=read_file(optimizer_path,
+        8u+max_header_bytes+2u*max_payload_bytes);
+    if (binary.size()<8u)
+        throw std::invalid_argument("Truncated training Safetensors header");
+    const auto header_size=decode64(std::string_view(binary).substr(0u,8u));
+    if (header_size==0u || header_size>max_header_bytes ||
+        header_size>binary.size()-8u)
+        throw std::invalid_argument("Invalid training Safetensors header length");
+    const std::size_t data_begin=8u+static_cast<std::size_t>(header_size);
+    const auto json=JsonParser(
+        std::string_view(binary).substr(8u,static_cast<std::size_t>(header_size))).parse();
+    keys(json,3u);
+    auto const& metadata=field(json,"__metadata__");
+    keys(metadata,13u);
+    (void)literal(field(metadata,"format"),"ariadne-neural-training");
+    if (text(field(metadata,"snapshot_sha256"))!=neural_snapshot_sha256(snapshot))
+        throw std::invalid_argument("Training state refers to a different model");
+    const auto saved_hash=text(field(metadata,"checkpoint_sha256"));
+    const auto steps=decimal_size(text(field(metadata,"steps")));
+    const auto mask=parse_mask(text(field(metadata,"trainable_layers")),
+                              snapshot.network().layers().size());
+    NeuralOptimizerOptions options;
+    options.kind=parse_optimizer(text(field(metadata,"optimizer")));
+    options.learning_rate=decode_double(text(field(metadata,"learning_rate")));
+    options.momentum=decode_double(text(field(metadata,"momentum")));
+    options.weight_decay=decode_double(text(field(metadata,"weight_decay")));
+    options.beta1=decode_double(text(field(metadata,"beta1")));
+    options.beta2=decode_double(text(field(metadata,"beta2")));
+    options.epsilon=decode_double(text(field(metadata,"epsilon")));
+    auto loss=parse_loss(text(field(metadata,"loss")));
+    std::size_t offset=0u;
+    verify_tensor(json.object,"first_moment",{count},offset);
+    verify_tensor(json.object,"second_moment",{count},offset);
+    if (offset!=count*16u || offset!=binary.size()-data_begin)
+        throw std::invalid_argument("Wrong training state Safetensors length");
+    std::vector<double> first(count),second(count);
+    for (std::size_t i=0u;i<count;++i) {
+        first[i]=std::bit_cast<double>(decode64(
+            std::string_view(binary).substr(data_begin+8u*i,8u)));
+        second[i]=std::bit_cast<double>(decode64(
+            std::string_view(binary).substr(data_begin+8u*count+8u*i,8u)));
+    }
+    NeuralTrainingSession result(NeuralTrainingCheckpoint{
+        std::move(snapshot), options, loss, mask,
+        std::move(first), std::move(second), steps
+    });
+    const auto actual_hash=training_sha256(result.export_checkpoint());
+    if (saved_hash.size()!=64u ||
+        saved_hash.find_first_not_of("0123456789abcdef")!=std::string::npos ||
+        saved_hash!=actual_hash)
+        throw std::invalid_argument("Training checkpoint SHA-256 mismatch");
+    return result;
 }
 
 } // namespace Ariadne

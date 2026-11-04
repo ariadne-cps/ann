@@ -120,15 +120,27 @@ void neural_submodule(pybind11::module& module) {
         .def_readwrite("beta2", &NeuralOptimizerOptions::beta2)
         .def_readwrite("epsilon", &NeuralOptimizerOptions::epsilon);
 
+    pybind11::class_<NeuralTrainingCheckpoint>(module, "NeuralTrainingCheckpoint")
+        .def_readonly("snapshot", &NeuralTrainingCheckpoint::snapshot)
+        .def_readonly("options", &NeuralTrainingCheckpoint::options)
+        .def_readonly("loss", &NeuralTrainingCheckpoint::loss)
+        .def_readonly("trainable_layers", &NeuralTrainingCheckpoint::trainable_layers)
+        .def_readonly("first_moment", &NeuralTrainingCheckpoint::first_moment)
+        .def_readonly("second_moment", &NeuralTrainingCheckpoint::second_moment)
+        .def_readonly("steps", &NeuralTrainingCheckpoint::steps);
+
     pybind11::class_<NeuralTrainingSession>(module, "NeuralTrainingSession")
         .def(pybind11::init<NeuralParameterSnapshot, NeuralOptimizerOptions, NeuralLossKind,
                             std::vector<bool>>(),
              pybind11::arg("initial"), pybind11::arg("options"),
              pybind11::arg("loss") = NeuralLossKind::MeanSquaredError,
              pybind11::arg("trainable_layers") = std::vector<bool>{})
+        .def(pybind11::init<NeuralTrainingCheckpoint>(),
+             pybind11::arg("checkpoint"))
         .def("steps", &NeuralTrainingSession::steps)
         .def("trainable_layers", &NeuralTrainingSession::trainable_layers)
         .def("export_snapshot", &NeuralTrainingSession::export_snapshot)
+        .def("export_checkpoint", &NeuralTrainingSession::export_checkpoint)
         .def("loss_batch", &NeuralTrainingSession::loss_batch,
              pybind11::arg("inputs"), pybind11::arg("targets"))
         .def("train_batch", &NeuralTrainingSession::train_batch,
@@ -149,6 +161,12 @@ void neural_submodule(pybind11::module& module) {
                pybind11::arg("safetensors_path"));
     module.def("neural_load_snapshot", &neural_load_snapshot,
                pybind11::arg("manifest_path"), pybind11::arg("safetensors_path"));
+    module.def("neural_save_training_checkpoint", &neural_save_training_checkpoint,
+               pybind11::arg("session"), pybind11::arg("manifest_path"),
+               pybind11::arg("safetensors_path"), pybind11::arg("optimizer_path"));
+    module.def("neural_load_training_checkpoint", &neural_load_training_checkpoint,
+               pybind11::arg("manifest_path"), pybind11::arg("safetensors_path"),
+               pybind11::arg("optimizer_path"));
 
     module.def("neural_backend_available", &neural_backend_available,
                pybind11::arg("backend"));
