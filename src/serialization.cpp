@@ -172,7 +172,7 @@ Json const& field(Json const& value, char const* key) {
         throw std::invalid_argument("Expected JSON object");
     const auto it = value.object.find(key);
     if (it == value.object.end())
-        throw std::invalid_argument("Missing required JSON field: " + key);
+        throw std::invalid_argument(std::string("Missing required JSON field: ") + key);
     return it->second;
 }
 void keys(Json const& j, std::size_t expected) {
