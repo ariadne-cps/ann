@@ -167,7 +167,7 @@ private:
     }
 };
 
-Json const& field(Json const& value, std::string const& key) {
+Json const& field(Json const& value, char const* key) {
     if (value.kind != Json::Kind::Object)
         throw std::invalid_argument("Expected JSON object");
     const auto it = value.object.find(key);
