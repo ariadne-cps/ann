@@ -10,3 +10,6 @@
 [submodule "pyc"]
 	path = ss/pyc
 	url = https://github.com/ariadne-cps/python-common
+[submodule "num"]
+	path = ss/num
+	url = https://github.com/ariadne-cps/numeric

@@ -970,6 +970,42 @@ extrema. Sampling is an additional falsification technique, not a proof.
 No floating-point approximate result may be silently relabeled
 validated. Document domain, parameter, rounding, and backend assumptions.
 
+### M6 native Ariadne Numeric interval propagation (2026-11-04)
+
+**Implementation status: first slice implemented, cross-platform CI pending.**
+Neural now directly depends on Numeric alongside Threading; Function and
+Symbolic remain absent. The new `neural_validated_bounds(snapshot, box)`
+uses `FloatDPBounds`, with exact binary64 scalar embedding for model
+weights/biases and input endpoints. All affine additions and products
+use directed outward rounding. Activations are evaluated as intervals
+using Ariadne Numeric's existing monotone `tanh`, `sigmoid`,
+`softplus`, `max(x,0)` for ReLU and identity. All intermediate
+enclosures must be finite or evaluation throws; no false finite result
+is returned when overflow is encountered. Inputs require finite ordered
+endpoints and a vector of exactly the input dimension. Public result
+`NeuralInterval` contains lower/upper binary64 endpoints.
+
+`AriadneValidated` is advertised as an actually available backend,
+but implements **only** ImportSnapshot and ValidatedBounds. It rejects
+approximate Inference, BatchInference, derivatives and Training.
+`NativeCpu` continues to reject ValidatedBounds. This explicit
+capability split prevents accidentally relabeling approximate results
+as rigorous. Both C++ and Python bindings offer the standalone
+`neural_validated_bounds` function and validated session method.
+The public interface keeps Numeric types in the implementation
+rather than exposing `FloatDPBounds` directly.
+
+C++ `test_validated.cpp` tests exact affine corner extrema,
+cancellation, interval composition, the five activation types,
+sampling-based falsification and malformed/infinite/overflow inputs.
+Python `test_network.py` checks capability isolation, analytical
+interval bounds and sampled enclosures. Sample inclusion is **not**
+a proof; correctness relies on Numeric's directed-rounding primitives.
+The initial milestone provides natural interval extensions only,
+without derivative enclosures, tightened affine/Taylor arithmetic
+or validated mixed-precision model transfer. Full CI and additional
+independent enclosure oracles remain acceptance work.
+
 ### M7 — Structural constraints and construction guarantees
 
 **Deliverables:** Constraints such as nonnegative weights and bounded
@@ -1066,6 +1102,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
+| 2026-11-04 | M6 Numeric-backed validated interval enclosures | Implemented; CI pending | Introduced direct Numeric submodule dependency, FloatDPBounds interval bound propagation with outward rounding and all five activations, independent NeuralInterval public bounds and actual AriadneValidated capability reporting. Added C++/Python mathematical oracle, sampling and malformed-input tests, README and tutorial. No Function/Symbolic dependency; no validated derivatives, tightened enclosures or numerical-backend fallback. |
 | 2026-11-04 | M5 atomic directory publication | Implemented; CI pending | Added C++/Python model-only and training checkpoint directory APIs. Staging in a sibling directory uses existing JSON/Safetensors serialization and validates round trips before one rename makes a complete immutable checkpoint visible. Existing destinations are rejected; staging cleanup on failure; concurrency no-replace is not portable and power-loss durability is not guaranteed. Added cross-language tests and tutorials without changing file formats or introducing versioning. |
 | 2026-11-04 | M5 checkpoint header compilation fix and memory efficiency | Fixed; CI pending | Corrected malformed C++ JSON header string literals from the initial training checkpoint commit using C++ raw string literals; fixed both the syntax and ensured exact Safetensors metadata structure. Changed canonical training digest code to iterate over const pointers to moment vectors rather than copying potentially large arrays. Initial checkpoint commit failed sanitizer build; re-run all compilers and tests on the corrected code. |
 | 2026-11-04 | M5 resumable native CPU optimizer checkpoints | Implemented; full CI pending | Added NeuralTrainingCheckpoint and native session export/restore preserving SGD momentum or AdamW first/second moments, optimizer options, loss, layer trainability and update counter. Added separate optimizer Safetensors file with exact F64 moments, strict metadata and SHA-256 digest bound to the model snapshot; loader rejects mismatched files and tampering. Added C++/Python deterministic replay and corruption tests plus both tutorials, README and design documentation. No new dependencies; three-file persistence is non-atomic, not authenticated, and external data-stream RNG state is not captured. |

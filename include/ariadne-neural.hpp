@@ -30,5 +30,6 @@
 #include "neural/backend.hpp"
 #include "neural/training.hpp"
 #include "neural/serialization.hpp"
+#include "neural/validated.hpp"
 
 #endif // ARIADNE_NEURAL_MODULE_HPP

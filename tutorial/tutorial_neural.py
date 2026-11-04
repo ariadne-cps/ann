@@ -45,6 +45,8 @@ from pyariadne import (
     neural_initialize_parameters,
     neural_replace_output_head,
     NeuralLossKind,
+    NeuralInterval,
+    NeuralBackendKind,
 )
 
 if __name__ == "__main__":
@@ -54,6 +56,9 @@ if __name__ == "__main__":
     ])
     snapshot = NeuralParameterSnapshot(model, [1, -1, -1, 1, 0, 0, 1, 1, 0])
     session = NeuralExecutionSession(snapshot)
+    rigorous = NeuralExecutionSession(snapshot, NeuralBackendKind.AriadneValidated)
+    enclosure = rigorous.validated_bounds([NeuralInterval(1, 3), NeuralInterval(0, 2)])
+    print("Rigorous output enclosure:", enclosure[0].lower, enclosure[0].upper)
     print("Ariadne Neural", neural_version())
     print("Network dimensions:", model.input_dimension(), "->", model.output_dimension())
     print("Parameters:", model.parameter_count())

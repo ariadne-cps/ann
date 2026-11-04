@@ -29,6 +29,7 @@
 #include "neural/backend.hpp"
 #include "neural/training.hpp"
 #include "neural/serialization.hpp"
+#include "neural/validated.hpp"
 
 #include <cstddef>
 #include <vector>
@@ -74,6 +75,12 @@ void neural_submodule(pybind11::module& module) {
              pybind11::return_value_policy::reference_internal)
         .def("values", &NeuralParameterSnapshot::export_values)
         .def("export_values", &NeuralParameterSnapshot::export_values);
+
+    pybind11::class_<NeuralInterval>(module, "NeuralInterval")
+        .def(pybind11::init<double,double>(),
+             pybind11::arg("lower"), pybind11::arg("upper"))
+        .def_readonly("lower", &NeuralInterval::lower)
+        .def_readonly("upper", &NeuralInterval::upper);
 
     pybind11::enum_<NeuralBackendKind>(module, "NeuralBackendKind")
         .value("NativeCpu", NeuralBackendKind::NativeCpu)
@@ -178,6 +185,8 @@ void neural_submodule(pybind11::module& module) {
                &neural_load_training_checkpoint_atomic,
                pybind11::arg("directory"));
 
+    module.def("neural_validated_bounds", &neural_validated_bounds,
+               pybind11::arg("snapshot"), pybind11::arg("inputs"));
     module.def("neural_backend_available", &neural_backend_available,
                pybind11::arg("backend"));
     module.def("neural_backend_supports", &neural_backend_supports,
@@ -192,6 +201,8 @@ void neural_submodule(pybind11::module& module) {
         .def("export_snapshot", &NeuralExecutionSession::export_snapshot)
         .def("infer", &NeuralExecutionSession::infer, pybind11::arg("input"))
         .def("infer_batch", &NeuralExecutionSession::infer_batch, pybind11::arg("inputs"))
+        .def("validated_bounds", &NeuralExecutionSession::validated_bounds,
+             pybind11::arg("inputs"))
         .def("differentiate", &NeuralExecutionSession::differentiate,
              pybind11::arg("input"), pybind11::arg("output_cotangent"))
         .def("input_jacobian", &NeuralExecutionSession::input_jacobian,

@@ -38,6 +38,11 @@ int main() {
         network, {1.0, -1.0, -1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0});
     NeuralExecutionSession session(parameters);
 
+    NeuralExecutionSession rigorous(parameters,NeuralBackendKind::AriadneValidated);
+    const auto rigorous_output=rigorous.validated_bounds({{1.0,3.0},{0.0,2.0}});
+    std::cout << "Rigorous output enclosure: ["
+              << rigorous_output.at(0).lower << ", "
+              << rigorous_output.at(0).upper << "]\n";
     std::cout << "Ariadne Neural " << neural_version() << '\n'
               << "Network dimensions: " << network.input_dimension()
               << " -> " << network.output_dimension() << '\n'

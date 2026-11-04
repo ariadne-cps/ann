@@ -33,6 +33,7 @@
 
 #include "neural/network.hpp"
 #include "neural/derivatives.hpp"
+#include "neural/validated.hpp"
 
 namespace Ariadne {
 
@@ -117,6 +118,12 @@ public:
      */
     std::vector<std::vector<double>> infer_batch(
         std::vector<std::vector<double>> const& inputs) const;
+
+    /** @brief Rigorous output enclosure for an input box on AriadneValidated.
+     *  There is no implicit approximate fallback.
+     */
+    std::vector<NeuralInterval> validated_bounds(
+        std::vector<NeuralInterval> const& inputs) const;
 
     /** @brief Reverse-mode vector-Jacobian product for c dot network(input).
      *

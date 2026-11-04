@@ -41,6 +41,8 @@ from pyariadne import (
     NeuralNetwork,
     NeuralOperation,
     NeuralParameterSnapshot,
+    NeuralInterval,
+    neural_validated_bounds,
     neural_backend_available,
     neural_backend_supports,
 )
@@ -97,8 +99,12 @@ def test_backend_capability_rejection():
     assert neural_backend_available(NeuralBackendKind.NativeCpu)
     assert neural_backend_supports(NeuralBackendKind.NativeCpu,
                                    NeuralOperation.ImportSnapshot)
-    for kind in (NeuralBackendKind.AriadneValidated,
-                 NeuralBackendKind.LibTorch, NeuralBackendKind.Mlx):
+    assert neural_backend_available(NeuralBackendKind.AriadneValidated)
+    assert neural_backend_supports(NeuralBackendKind.AriadneValidated,
+                                   NeuralOperation.ValidatedBounds)
+    assert not neural_backend_supports(NeuralBackendKind.AriadneValidated,
+                                       NeuralOperation.Inference)
+    for kind in (NeuralBackendKind.LibTorch, NeuralBackendKind.Mlx):
         assert not neural_backend_available(kind)
         assert not neural_backend_supports(kind, NeuralOperation.ImportSnapshot)
         with pytest.raises(ValueError):
@@ -280,3 +286,42 @@ def test_m5_frozen_layers_and_replaced_output_head():
     with pytest.raises(ValueError):
         neural_replace_output_head(
             source, NeuralDenseLayerSpec(0, NeuralActivation.Identity), 3)
+
+
+def test_m6_validated_enclosures_and_no_approximate_fallback():
+    model = NeuralNetwork(2, [
+        NeuralDenseLayerSpec(1, NeuralActivation.Identity)])
+    snapshot = NeuralParameterSnapshot(model, [2.0, -3.0, 0.5])
+    session = NeuralExecutionSession(snapshot, NeuralBackendKind.AriadneValidated)
+    assert session.supports(NeuralOperation.ValidatedBounds)
+    assert not session.supports(NeuralOperation.Inference)
+    assert not session.supports(NeuralOperation.Training)
+    bounds = session.validated_bounds([NeuralInterval(-1, 2), NeuralInterval(4, 5)])
+    assert len(bounds) == 1
+    assert -17 < bounds[0].lower <= -16.5
+    assert -7.5 <= bounds[0].upper < -7
+    with pytest.raises(RuntimeError):
+        session.infer([0, 0])
+    with pytest.raises(RuntimeError):
+        NeuralExecutionSession(snapshot).validated_bounds(
+            [NeuralInterval(-1, 2), NeuralInterval(4, 5)])
+
+    for activation in (NeuralActivation.Identity, NeuralActivation.Relu,
+                       NeuralActivation.Tanh, NeuralActivation.Sigmoid,
+                       NeuralActivation.Softplus):
+        net = NeuralNetwork(1, [NeuralDenseLayerSpec(1, activation)])
+        snap = NeuralParameterSnapshot(net, [1.25, -0.5])
+        bounds = neural_validated_bounds(snap, [NeuralInterval(-3, 4)])[0]
+        approximate = NeuralExecutionSession(snap)
+        for step in range(51):
+            x = -3 + 7 * step / 50
+            y = approximate.infer([x])[0]
+            assert bounds.lower <= y <= bounds.upper
+    with pytest.raises(ValueError):
+        neural_validated_bounds(snapshot, [NeuralInterval(0, 1)])
+    with pytest.raises(ValueError):
+        neural_validated_bounds(snapshot,
+                                [NeuralInterval(2, 1), NeuralInterval(0, 1)])
+    with pytest.raises(ValueError):
+        neural_validated_bounds(snapshot,
+                                [NeuralInterval(0, math.inf), NeuralInterval(0, 1)])
