@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <fstream>
+#include <filesystem>
 #include <iterator>
 #include <limits>
 #include <stdexcept>
@@ -73,6 +74,71 @@ public:
         if (!output) throw std::runtime_error("Cannot write test fixture");
         output.write(bytes.data(),static_cast<std::streamsize>(bytes.size()));
         if (!output) throw std::runtime_error("Cannot write test fixture");
+    }
+
+    void test_atomic_checkpoint_directory() {
+        namespace fs = std::filesystem;
+        Files files;
+        const fs::path destination = "test_neural_m5_atomic_checkpoint";
+        const fs::path snapshot_dir = "test_neural_m5_atomic_model";
+        // An already published checkpoint must remain intact.
+        std::error_code cleanup;
+        fs::remove_all(destination, cleanup);
+        fs::remove_all(snapshot_dir, cleanup);
+        struct Remove {
+            fs::path first, second;
+            ~Remove() {
+                std::error_code ec;
+                fs::remove_all(first, ec);
+                fs::remove_all(second, ec);
+            }
+        } remove{destination, snapshot_dir};
+        const auto original=model();
+        neural_save_snapshot_atomic(original, snapshot_dir.string());
+        ARIADNE_TESTING_PROVE(fs::is_regular_file(snapshot_dir / "model.json"));
+        ARIADNE_TESTING_PROVE(fs::is_regular_file(snapshot_dir / "model.safetensors"));
+        ARIADNE_TESTING_PROVE(!fs::exists(snapshot_dir / "optimizer.safetensors"));
+        ARIADNE_TESTING_PROVE(
+            neural_load_snapshot_atomic(snapshot_dir.string()).values()
+            == original.values());
+        const auto preserved = file((snapshot_dir / "model.json").string());
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            neural_save_snapshot_atomic(original, snapshot_dir.string()));
+        ARIADNE_TESTING_PROVE(
+            file((snapshot_dir / "model.json").string()) == preserved);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            (void)neural_load_snapshot_atomic("test_neural_m5_missing_checkpoint"));
+
+        NeuralOptimizerOptions options;
+        options.kind=NeuralOptimizerKind::AdamW;
+        NeuralTrainingSession training(original, options);
+        (void)training.train_batch({{0.2, 0.4}}, {{0.6}});
+        neural_save_training_checkpoint_atomic(training, destination.string());
+        ARIADNE_TESTING_PROVE(fs::is_regular_file(destination / "model.json"));
+        ARIADNE_TESTING_PROVE(
+            fs::is_regular_file(destination / "model.safetensors"));
+        ARIADNE_TESTING_PROVE(
+            fs::is_regular_file(destination / "optimizer.safetensors"));
+        auto restored=neural_load_training_checkpoint_atomic(destination.string());
+        ARIADNE_TESTING_EXPECT_EQUAL(restored.steps(), std::size_t{1});
+        ARIADNE_TESTING_PROVE(restored.export_snapshot().values() ==
+                              training.export_snapshot().values());
+        const auto checkpoint_bytes=file((destination / "optimizer.safetensors").string());
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            neural_save_training_checkpoint_atomic(training, destination.string()));
+        ARIADNE_TESTING_PROVE(
+            file((destination / "optimizer.safetensors").string()) == checkpoint_bytes);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            neural_save_training_checkpoint_atomic(training,
+                "test_neural_m5_missing_parent/subdir"));
+
+        // A malformed staging target must never be advertised as published.
+        const fs::path incomplete="test_neural_m5_atomic_incomplete";
+        fs::remove_all(incomplete, cleanup);
+        fs::create_directory(incomplete);
+        ARIADNE_TESTING_EXPECT_THROWS(std::runtime_error,
+            (void)neural_load_training_checkpoint_atomic(incomplete.string()));
+        fs::remove_all(incomplete, cleanup);
     }
 
     void test_training_checkpoint_resume_and_corruption() {
@@ -319,6 +385,7 @@ public:
 
 int main(int argc,char** argv) {
     ARIADNE_TESTING_SUITE("serialization");
+    ARIADNE_TESTING_ADD_TEST(TestSerialization,test_atomic_checkpoint_directory);
     ARIADNE_TESTING_ADD_TEST(TestSerialization,test_training_checkpoint_resume_and_corruption);
     ARIADNE_TESTING_ADD_TEST(TestSerialization,test_exact_binary64_roundtrip);
     ARIADNE_TESTING_ADD_TEST(TestSerialization,test_sha256_standard_vectors);

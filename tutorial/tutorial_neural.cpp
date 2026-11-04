@@ -92,6 +92,13 @@ int main() {
     neural_save_training_checkpoint(trainer,manifest,tensors,optimizer_state);
     auto resumed=neural_load_training_checkpoint(manifest,tensors,optimizer_state);
     std::cout << "Recovered optimizer steps: " << resumed.steps() << '\n';
+    // Publish a separate complete checkpoint directory in one rename.
+    const auto atomic_dir = prefix.string() + ".checkpoint";
+    // Use a fresh destination; a published checkpoint is never overwritten.
+    neural_save_training_checkpoint_atomic(trainer, atomic_dir);
+    std::cout << "Atomic directory optimizer steps: "
+              << neural_load_training_checkpoint_atomic(atomic_dir).steps() << '\n';
+    (void)std::filesystem::remove_all(atomic_dir);
     (void)std::remove(optimizer_state.c_str());
     (void)std::remove(manifest.c_str());
     (void)std::remove(tensors.c_str());

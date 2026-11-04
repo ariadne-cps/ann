@@ -39,6 +39,8 @@ from pyariadne import (
     neural_load_snapshot,
     neural_save_training_checkpoint,
     neural_load_training_checkpoint,
+    neural_save_training_checkpoint_atomic,
+    neural_load_training_checkpoint_atomic,
     neural_snapshot_sha256,
     neural_initialize_parameters,
     neural_replace_output_head,
@@ -80,6 +82,10 @@ if __name__ == "__main__":
         neural_save_training_checkpoint(trainer, manifest, tensors, optimizer_file)
         resumed = neural_load_training_checkpoint(manifest, tensors, optimizer_file)
         print("Recovered optimizer steps:", resumed.steps())
+        published = Path(directory) / "published"
+        neural_save_training_checkpoint_atomic(trainer, str(published))
+        print("Published checkpoint steps:",
+              neural_load_training_checkpoint_atomic(str(published)).steps())
 
     # Fine-tune a new output head while retaining the trained feature layer.
     features = NeuralNetwork(1, [

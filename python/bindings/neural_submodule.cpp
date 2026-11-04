@@ -167,6 +167,16 @@ void neural_submodule(pybind11::module& module) {
     module.def("neural_load_training_checkpoint", &neural_load_training_checkpoint,
                pybind11::arg("manifest_path"), pybind11::arg("safetensors_path"),
                pybind11::arg("optimizer_path"));
+    module.def("neural_save_snapshot_atomic", &neural_save_snapshot_atomic,
+               pybind11::arg("snapshot"), pybind11::arg("directory"));
+    module.def("neural_load_snapshot_atomic", &neural_load_snapshot_atomic,
+               pybind11::arg("directory"));
+    module.def("neural_save_training_checkpoint_atomic",
+               &neural_save_training_checkpoint_atomic,
+               pybind11::arg("session"), pybind11::arg("directory"));
+    module.def("neural_load_training_checkpoint_atomic",
+               &neural_load_training_checkpoint_atomic,
+               pybind11::arg("directory"));
 
     module.def("neural_backend_available", &neural_backend_available,
                pybind11::arg("backend"));

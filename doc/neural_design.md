@@ -919,6 +919,41 @@ optimizer state, not arbitrary third-party backends; RNG state for external
 data shuffling or training schedule is not recorded. No additional
 runtime/cryptography dependency is introduced.
 
+### M5 atomic checkpoint directory publication (2026-11-04)
+
+**Implementation status: implemented, CI pending.** Added dedicated
+directory APIs for model-only snapshots and complete training checkpoints:
+`neural_save_snapshot_atomic`, `neural_load_snapshot_atomic`,
+`neural_save_training_checkpoint_atomic` and
+`neural_load_training_checkpoint_atomic` (C++ and Python). Each saver
+creates a private staging directory under the existing destination
+parent, uses the unchanged JSON/Safetensors writers, loads the staged
+files to verify content integrity, then performs one directory rename
+into the specified previously absent checkpoint directory. The staged
+directory is removed on exceptions. Destination paths already present
+(including empty directories or symlinks) are rejected prior to writes.
+This is create-only publication: each subsequent checkpoint must have
+a new directory name. Direct file-path APIs remain available with
+explicitly non-atomic semantics.
+
+**Concurrence and durability limits:** Directory rename on supported
+local filesystems gives atomic visibility of the complete file collection.
+C++ standard filesystem rename does **not** universally provide
+atomic no-replace when several writers concurrently target the same
+absent path: callers must coordinate competing writers externally.
+The preflight existence test is not an interprocess lock. Publication
+is not guaranteed durable after a power loss, because no platform-specific
+fsync of staged files and parent directories is performed. Directory
+staging is intentionally confined to the same parent filesystem. No
+version field, new mandatory dependency or different model representation
+is introduced.
+
+C++ and Python tests cover complete publication, exact restored model
+identity/training step, rejection of an existing destination, unchanged
+published bytes after rejected writes, invalid parent directories and
+rejection of incomplete directories. Both tutorials demonstrate the
+new directory API.
+
 ### M6 — Validated inference and numerical enclosures
 
 **Deliverables:** Implement a distinct Ariadne validated evaluator consuming
@@ -1031,6 +1066,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
+| 2026-11-04 | M5 atomic directory publication | Implemented; CI pending | Added C++/Python model-only and training checkpoint directory APIs. Staging in a sibling directory uses existing JSON/Safetensors serialization and validates round trips before one rename makes a complete immutable checkpoint visible. Existing destinations are rejected; staging cleanup on failure; concurrency no-replace is not portable and power-loss durability is not guaranteed. Added cross-language tests and tutorials without changing file formats or introducing versioning. |
 | 2026-11-04 | M5 checkpoint header compilation fix and memory efficiency | Fixed; CI pending | Corrected malformed C++ JSON header string literals from the initial training checkpoint commit using C++ raw string literals; fixed both the syntax and ensured exact Safetensors metadata structure. Changed canonical training digest code to iterate over const pointers to moment vectors rather than copying potentially large arrays. Initial checkpoint commit failed sanitizer build; re-run all compilers and tests on the corrected code. |
 | 2026-11-04 | M5 resumable native CPU optimizer checkpoints | Implemented; full CI pending | Added NeuralTrainingCheckpoint and native session export/restore preserving SGD momentum or AdamW first/second moments, optimizer options, loss, layer trainability and update counter. Added separate optimizer Safetensors file with exact F64 moments, strict metadata and SHA-256 digest bound to the model snapshot; loader rejects mismatched files and tampering. Added C++/Python deterministic replay and corruption tests plus both tutorials, README and design documentation. No new dependencies; three-file persistence is non-atomic, not authenticated, and external data-stream RNG state is not captured. |
 | 2026-11-04 | Coverage CI: Codecov token check and report upload | Implemented; CI pending | Restored missing Codecov upload in Neural Coverage workflow, following Threading: macOS job checks `secrets.CODECOV_TOKEN` and fails explicitly when unavailable, then uploads `${{ runner.workspace }}/build/coverage.info` using codecov/codecov-action@v7.1.1 with disable_search, fail_ci_if_error and verbose enabled. Ubuntu/macOS continue generating coverage; only macOS uploads. Secret presence and external Codecov receipt cannot be verified from repository contents and require workflow execution; fork PRs without secrets will fail macOS by design. |\n| 2026-11-04 | M5 SHA-256 header/source separation | Implemented; CI pending | Split SHA-256 helper into declaration include/neural/sha256.hpp and implementation src/sha256.cpp, removed src/sha256.hpp, updated serialization include and NEURAL_SRC source list. Preserved the existing FIPS 180-4 hashing algorithm, canonical model digest and no external crypto dependencies. Added direct SHA-256 known-answer tests (empty, incremental abc, 1,000,000 a) to C++ serialization suite. Previous SHA snapshot commit had five green workflows; cross-platform CI of this refactor pending. |\n| 2026-11-04 | M5 canonical snapshot SHA-256 and current-only manifest | Implemented; CI pending | Removed manifest version field rather than introducing v1/v2 compatibility; required SHA-256 digest over canonical topology, activation tags and exact binary64 parameters. Added C++ and Python API neural_snapshot_sha256, FIPS SHA-256 implementation, same-shaped finite payload tamper detection, signed-zero identity checks and independent Python hashlib reference. Legacy manifests without digest intentionally rejected. Two-file publication remains non-atomic; no signature/authentication or optimizer-state checkpoint. |

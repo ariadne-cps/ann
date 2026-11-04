@@ -99,6 +99,33 @@ NeuralTrainingSession neural_load_training_checkpoint(
     std::string const& safetensors_path,
     std::string const& optimizer_path);
 
+/** @brief Publish a new immutable model checkpoint directory via one rename.
+ *
+ *  Creates a private staging sibling directory, writes model.json and
+ *  model.safetensors and verifies their content before publishing. The
+ *  destination must not exist. Existing checkpoints are never intentionally
+ *  overwritten. No schema or file format change; no crash-durability,
+ *  multi-writer no-replace, or cross-filesystem guarantee is provided.
+ */
+void neural_save_snapshot_atomic(NeuralParameterSnapshot const& snapshot,
+                                 std::string const& directory);
+
+/** @brief Read a complete model checkpoint directory. */
+NeuralParameterSnapshot neural_load_snapshot_atomic(std::string const& directory);
+
+/** @brief Publish a complete new training checkpoint directory.
+ *
+ *  Writes model.json, model.safetensors and optimizer.safetensors to a
+ *  private staging sibling, verifies the model and optimizer contents,
+ *  then renames the directory into place. Destination must be absent.
+ */
+void neural_save_training_checkpoint_atomic(NeuralTrainingSession const& session,
+                                            std::string const& directory);
+
+/** @brief Restore a complete training checkpoint directory. */
+NeuralTrainingSession neural_load_training_checkpoint_atomic(
+    std::string const& directory);
+
 } // namespace Ariadne
 
 #endif // ARIADNE_NEURAL_SERIALIZATION_HPP

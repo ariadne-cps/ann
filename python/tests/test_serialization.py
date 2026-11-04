@@ -41,6 +41,10 @@ from pyariadne import (
     NeuralTrainingSession,
     neural_load_training_checkpoint,
     neural_save_training_checkpoint,
+    neural_save_snapshot_atomic,
+    neural_load_snapshot_atomic,
+    neural_save_training_checkpoint_atomic,
+    neural_load_training_checkpoint_atomic,
     neural_load_snapshot,
     neural_save_snapshot,
     neural_snapshot_sha256,
@@ -248,3 +252,38 @@ def test_training_checkpoint_exact_resume_and_integrity(tmp_path, optimizer):
                          manifest, tensors)
     with pytest.raises(ValueError):
         neural_load_training_checkpoint(manifest, tensors, moments)
+
+
+def test_atomic_checkpoint_directory_publication(tmp_path):
+    snapshot = make_snapshot()
+    model_dir = tmp_path / "model"
+    neural_save_snapshot_atomic(snapshot, str(model_dir))
+    assert sorted(p.name for p in model_dir.iterdir()) == [
+        "model.json", "model.safetensors"]
+    assert neural_load_snapshot_atomic(str(model_dir)).values() == snapshot.values()
+    untouched = (model_dir / "model.json").read_bytes()
+    with pytest.raises(ValueError):
+        neural_save_snapshot_atomic(snapshot, str(model_dir))
+    assert (model_dir / "model.json").read_bytes() == untouched
+
+    options = NeuralOptimizerOptions()
+    options.kind = NeuralOptimizerKind.AdamW
+    trainer = NeuralTrainingSession(snapshot, options)
+    trainer.train_batch([[0.2, 0.4]], [[0.6]])
+    directory = tmp_path / "training"
+    neural_save_training_checkpoint_atomic(trainer, str(directory))
+    assert sorted(p.name for p in directory.iterdir()) == [
+        "model.json", "model.safetensors", "optimizer.safetensors"]
+    resumed = neural_load_training_checkpoint_atomic(str(directory))
+    assert resumed.steps() == 1
+    assert resumed.export_snapshot().values() == trainer.export_snapshot().values()
+    preserved = (directory / "optimizer.safetensors").read_bytes()
+    with pytest.raises(ValueError):
+        neural_save_training_checkpoint_atomic(trainer, str(directory))
+    assert (directory / "optimizer.safetensors").read_bytes() == preserved
+    with pytest.raises(ValueError):
+        neural_save_training_checkpoint_atomic(
+            trainer, str(tmp_path / "nonexistent-parent" / "checkpoint"))
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["model", "training"]
+    with pytest.raises(ValueError):
+        neural_load_training_checkpoint_atomic(str(tmp_path / "missing"))

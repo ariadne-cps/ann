@@ -115,6 +115,30 @@ do not authenticate who created them. Publishing three files atomically is
 not supported. The checkpoint format is for the native CPU training
 implementation and has no external-backend interoperability guarantee.
 
+## Atomic checkpoint directory publication (M5)
+
+For a new, immutable checkpoint, use the directory-based API instead of
+writing multiple files directly:
+
+```python
+neural_save_training_checkpoint_atomic(trainer, "checkpoints/step-100")
+resumed = neural_load_training_checkpoint_atomic("checkpoints/step-100")
+```
+
+The model-only equivalents are `neural_save_snapshot_atomic` and
+`neural_load_snapshot_atomic`. The parent directory must exist and the
+destination must **not** exist. Each saver writes a private staging
+directory beside the destination, validates all files and then renames
+the directory once. The files remain the same JSON/Safetensors format.
+Previously published checkpoints are not intentionally overwritten;
+use a new destination for subsequent steps.
+
+Directory rename gives atomic visibility only when the underlying
+filesystem supports it. This does not provide crash-durable persistence
+or portable atomic no-replace semantics for concurrent writers; clients
+must serialize writers to the same destination. Low-level multi-file
+save APIs remain available but are not atomic.
+
 ## Performance benchmark
 
 Build a Release executable to compare the same three training algorithms on
