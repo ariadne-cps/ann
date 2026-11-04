@@ -231,8 +231,11 @@ NeuralOptimizerOptions optimizer(Options const& options, Variant v) {
 }
 
 double checksum(NeuralTrainingSession const& trainer) {
+    // Retain the returned snapshot for the full iteration: values()
+    // provides a reference into the snapshot rather than owning its data.
+    auto const snapshot = trainer.export_snapshot();
     double total = 0.0;
-    for(double v:trainer.export_snapshot().values()) total += v;
+    for (double v : snapshot.values()) total += v;
     if(!std::isfinite(total)) throw std::runtime_error("invalid model checksum");
     return total;
 }
