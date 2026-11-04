@@ -23,7 +23,7 @@
  */
 
 #include "neural/serialization.hpp"
-#include "sha256.hpp"
+#include "neural/sha256.hpp"
 
 #include <bit>
 #include <cmath>

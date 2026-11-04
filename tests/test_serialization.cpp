@@ -23,6 +23,7 @@
  */
 
 #include "ariadne-neural.hpp"
+#include "neural/sha256.hpp"
 #include "ariadne-testing.hpp"
 
 #include <bit>
@@ -101,6 +102,27 @@ public:
         neural_save_snapshot(restored,f.json,f.weights);
         ARIADNE_TESTING_PROVE(file(f.weights)==binary);
         ARIADNE_TESTING_PROVE(file(f.json)==manifest);
+    }
+
+    void test_sha256_standard_vectors() {
+        Detail::Sha256 empty;
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            empty.hex_digest(),
+            std::string("e3b0c44298fc1c149afbf4c8996fb924"
+                        "27ae41e4649b934ca495991b7852b855"));
+        Detail::Sha256 abc;
+        abc.update("a");
+        abc.update("bc");
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            abc.hex_digest(),
+            std::string("ba7816bf8f01cfea414140de5dae2223"
+                        "b00361a396177a9cb410ff61f20015ad"));
+        Detail::Sha256 multiple_blocks;
+        multiple_blocks.update(std::string(1000000u, 'a'));
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            multiple_blocks.hex_digest(),
+            std::string("cdc76e5c9914fb9281a1c7e284d73e67"
+                        "f1809a48a497200e046d39ccc7112cd0"));
     }
 
     void test_sha256_semantics() {
@@ -224,6 +246,7 @@ public:
 int main(int argc,char** argv) {
     ARIADNE_TESTING_SUITE("serialization");
     ARIADNE_TESTING_ADD_TEST(TestSerialization,test_exact_binary64_roundtrip);
+    ARIADNE_TESTING_ADD_TEST(TestSerialization,test_sha256_standard_vectors);
     ARIADNE_TESTING_ADD_TEST(TestSerialization,test_sha256_semantics);
     ARIADNE_TESTING_ADD_TEST(TestSerialization,test_manifest_schema_rejection);
     ARIADNE_TESTING_ADD_TEST(TestSerialization,test_safetensors_data_rejection);
