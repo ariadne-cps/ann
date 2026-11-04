@@ -69,6 +69,7 @@ int main() {
     auto const trained = trainer.export_snapshot();
     neural_save_snapshot(trained, manifest, tensors);
     auto const restored = neural_load_snapshot(manifest, tensors);
+    std::cout << "Snapshot SHA-256: " << neural_snapshot_sha256(restored) << '\n';
     std::cout << "Restored parameters: " << restored.network().parameter_count()
               << " | first weight: " << restored.values().at(0) << '\n';
     // Replace the output head, freeze the trained feature layer and fine-tune.

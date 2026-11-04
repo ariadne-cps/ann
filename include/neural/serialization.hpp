@@ -33,7 +33,20 @@
 
 namespace Ariadne {
 
-/** @brief Write one version-1 manifest JSON and its Safetensors data file.
+/** @brief Return the canonical SHA-256 identity of topology and parameter bits.
+ *
+ *  Hashes the domain-separated binary representation: input dimension and
+ *  layer count (little-endian u64), each layer output dimension (u64) and
+ *  activation identifier (one byte, Identity=0, Relu=1, Tanh=2,
+ *  Sigmoid=3, Softplus=4), followed by every parameter's IEEE-754
+ *  binary64 bit pattern as little-endian u64. The domain separator is
+ *  "ariadne-neural-model" followed by a NUL byte.
+ *  Result: 64 lowercase hexadecimal characters. This identifies model
+ *  content, NOT its author or provenance (there is no signature).
+ */
+std::string neural_snapshot_sha256(NeuralParameterSnapshot const& snapshot);
+
+/** @brief Write the current manifest JSON and its Safetensors data file.
  *
  *  Weights use per-layer tensors "layers.N.weight" [outputs,inputs] in
  *  row-major order and "layers.N.bias" [outputs]. All are F64 with exact
@@ -48,9 +61,12 @@ void neural_save_snapshot(NeuralParameterSnapshot const& snapshot,
                           std::string const& manifest_path,
                           std::string const& safetensors_path);
 
-/** @brief Load the exact version-1 JSON+Safetensors snapshot contract.
+/** @brief Load the current JSON+Safetensors snapshot contract.
  *
- *  Rejects unknown manifest fields/versions, malformed or oversized JSON,
+ *  Requires a SHA-256 digest matching the reconstructed canonical model;
+ *  earlier manifests without snapshot_sha256 are not accepted.
+ *
+ *  Rejects unknown manifest fields, missing/invalid digest, malformed or oversized JSON,
  *  duplicate/missing tensors, non-F64 values, inconsistent shapes/offsets,
  *  trailing bytes, nonfinite data and noncanonical metadata.
  *  @throws std::invalid_argument for malformed or incompatible content.

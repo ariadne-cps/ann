@@ -23,6 +23,7 @@
 """Versioned JSON manifest and Safetensors interoperability tests (no optional package)."""
 
 import json
+import hashlib
 import math
 import struct
 
@@ -36,6 +37,7 @@ from pyariadne import (
     NeuralParameterSnapshot,
     neural_load_snapshot,
     neural_save_snapshot,
+    neural_snapshot_sha256,
 )
 
 
@@ -62,7 +64,6 @@ def test_roundtrip_and_open_safetensors_layout(tmp_path):
     manifest = json.loads(manifest_path.read_text())
     assert manifest == {
         "format": "ariadne-neural",
-        "version": 1,
         "numeric": "IEEE754-binary64",
         "input_dimension": 2,
         "layers": [
@@ -70,6 +71,7 @@ def test_roundtrip_and_open_safetensors_layout(tmp_path):
             {"outputs": 1, "activation": "identity"},
         ],
         "tensors": "safetensors",
+        "snapshot_sha256": neural_snapshot_sha256(snapshot),
     }
 
     binary = weights_path.read_bytes()
@@ -104,7 +106,10 @@ def test_roundtrip_and_open_safetensors_layout(tmp_path):
 
 
 @pytest.mark.parametrize("corruption", [
-    "unsupported-version",
+    "wrong-digest",
+    "missing-digest",
+    "same-shape-different-activation",
+    "finite-weight-tamper",
     "extra-field",
     "duplicate-key",
     "unknown-activation",
@@ -125,13 +130,20 @@ def test_rejects_bad_snapshot(tmp_path, corruption):
     header = json.loads(binary[8:8 + count])
     payload = binary[8 + count:]
 
-    if corruption == "unsupported-version":
-        manifest["version"] = 99
+    if corruption == "wrong-digest":
+        manifest["snapshot_sha256"] = "0" * 64
+    elif corruption == "missing-digest":
+        del manifest["snapshot_sha256"]
+    elif corruption == "same-shape-different-activation":
+        manifest["layers"][0]["activation"] = "relu"
+    elif corruption == "finite-weight-tamper":
+        payload = struct.pack("<d", 1.625) + payload[8:]
     elif corruption == "extra-field":
         manifest["extension"] = 1
     elif corruption == "duplicate-key":
         manifest_path.write_text(manifest_path.read_text().replace(
-            '"version":1', '"version":1,"version":1'
+            '"format":"ariadne-neural"',
+            '"format":"ariadne-neural","format":"ariadne-neural"'
         ))
     elif corruption == "unknown-activation":
         manifest["layers"][0]["activation"] = "unsupported"
@@ -164,3 +176,18 @@ def test_rejects_same_path_and_missing_file(tmp_path):
     with pytest.raises(RuntimeError):
         neural_load_snapshot(str(tmp_path / "missing.json"),
                              str(tmp_path / "missing.safetensors"))
+
+def test_identity_matches_independent_hashlib_reference():
+    snapshot = make_snapshot()
+    data = b"ariadne-neural-model\x00"
+    model = snapshot.network()
+    data += struct.pack("<QQ", model.input_dimension(), len(model.layers()))
+    # Explicit independent reference tags for the Tanh/Identity fixture.
+    for layer, code in zip(model.layers(), (2, 0)):
+        data += struct.pack("<QB", layer.outputs, code)
+    data += b"".join(struct.pack("<d", value) for value in snapshot.values())
+    assert neural_snapshot_sha256(snapshot) == hashlib.sha256(data).hexdigest()
+    bits_changed = snapshot.values()
+    bits_changed[1] = 0.0
+    assert neural_snapshot_sha256(
+        NeuralParameterSnapshot(model, bits_changed)) != neural_snapshot_sha256(snapshot)

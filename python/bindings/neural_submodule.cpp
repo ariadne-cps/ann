@@ -142,6 +142,8 @@ void neural_submodule(pybind11::module& module) {
     module.def("neural_shuffled_indices", &neural_shuffled_indices,
                pybind11::arg("count"), pybind11::arg("seed"));
 
+    module.def("neural_snapshot_sha256", &neural_snapshot_sha256,
+               pybind11::arg("snapshot"));
     module.def("neural_save_snapshot", &neural_save_snapshot,
                pybind11::arg("snapshot"), pybind11::arg("manifest_path"),
                pybind11::arg("safetensors_path"));

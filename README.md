@@ -84,10 +84,13 @@ neural_save_snapshot(snapshot, "model.json", "model.safetensors")
 restored = neural_load_snapshot("model.json", "model.safetensors")
 ```
 
-The version-1 schema and strict size/type validation rules are recorded
-in [the design journal](doc/neural_design.md). File pairs must be published
-together; no cryptographic model identity, atomic two-file commit,
-optimizer-state checkpoint or ONNX import/export is implemented yet.
+The current-only schema and strict size/type validation rules are recorded
+in [the design journal](doc/neural_design.md). File pairs must be published together. Each manifest contains a canonical
+SHA-256 snapshot digest (exposed as `neural_snapshot_sha256`) binding topology,
+activations and exact binary64 parameter bits. The digest is a content
+identifier, not an authenticated signature. There is no legacy manifest
+version support, atomic two-file commit, optimizer-state checkpoint or ONNX
+import/export yet.
 
 ## Performance benchmark
 

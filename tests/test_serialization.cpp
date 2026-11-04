@@ -26,6 +26,7 @@
 #include "ariadne-testing.hpp"
 
 #include <bit>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
@@ -79,6 +80,10 @@ public:
         ARIADNE_TESTING_PROVE(binary.size()>8u);
         const auto manifest=file(f.json);
         ARIADNE_TESTING_PROVE(manifest.find("IEEE754-binary64")!=std::string::npos);
+        ARIADNE_TESTING_PROVE(manifest.find("\"snapshot_sha256\"")!=std::string::npos);
+        ARIADNE_TESTING_PROVE(manifest.find("\"version\"")==std::string::npos);
+        ARIADNE_TESTING_EXPECT_EQUAL(neural_snapshot_sha256(initial),
+                                     neural_snapshot_sha256(initial));
         ARIADNE_TESTING_PROVE(binary.find("layers.0.weight")!=std::string::npos);
         auto restored=neural_load_snapshot(f.json,f.weights);
         ARIADNE_TESTING_EXPECT_EQUAL(restored.network().input_dimension(),std::size_t{2});
@@ -98,15 +103,39 @@ public:
         ARIADNE_TESTING_PROVE(file(f.json)==manifest);
     }
 
+    void test_sha256_semantics() {
+        auto original=model();
+        auto const hash=neural_snapshot_sha256(original);
+        ARIADNE_TESTING_EXPECT_EQUAL(hash.size(),std::size_t{64});
+        auto bit_changed=original.export_values();
+        bit_changed[1]=0.0; // -0.0 and +0.0 have distinct identities.
+        ARIADNE_TESTING_PROVE(
+            neural_snapshot_sha256(NeuralParameterSnapshot(original.network(),bit_changed))
+                != hash);
+        auto weights_changed=original.export_values();
+        weights_changed[0]+=0.125;
+        ARIADNE_TESTING_PROVE(
+            neural_snapshot_sha256(NeuralParameterSnapshot(original.network(),weights_changed))
+                != hash);
+        NeuralNetwork other(2,{{2,NeuralActivation::Relu},
+                               {1,NeuralActivation::Identity}});
+        ARIADNE_TESTING_PROVE(
+            neural_snapshot_sha256(NeuralParameterSnapshot(other,original.export_values()))
+                != hash);
+    }
+
     void test_manifest_schema_rejection() {
         Files f;
         neural_save_snapshot(model(),f.json,f.weights);
         const std::string valid=file(f.json);
-        const std::string version="\"version\":1";
-        const std::size_t pos=valid.find(version);
-        ARIADNE_TESTING_PROVE(pos!=std::string::npos);
         std::string altered=valid;
-        altered.replace(pos,version.size(),"\"version\":2");
+        // Changing topology metadata while preserving the tensor shapes must
+        // not silently substitute an equivalent-sized but distinct model.
+        const std::string activation_valid="\"activation\":\"tanh\"";
+        const std::size_t matching=altered.find(activation_valid);
+        ARIADNE_TESTING_PROVE(matching!=std::string::npos);
+        altered.replace(matching,activation_valid.size(),
+                        "\"activation\":\"relu\"");
         write(f.json,altered);
         ARIADNE_TESTING_EXPECT_THROWS(
             std::invalid_argument,(void)neural_load_snapshot(f.json,f.weights));
@@ -124,6 +153,19 @@ public:
         ARIADNE_TESTING_PROVE(end!=std::string::npos);
         altered.replace(end,marker.size(),
             "\"tensors\":\"safetensors\",\"unknown\":0");
+        write(f.json,altered);
+        ARIADNE_TESTING_EXPECT_THROWS(
+            std::invalid_argument,(void)neural_load_snapshot(f.json,f.weights));
+        altered=valid;
+        const std::string key="\"snapshot_sha256\":\"";
+        const std::size_t digest=altered.find(key);
+        ARIADNE_TESTING_PROVE(digest!=std::string::npos);
+        altered[digest+key.size()]='f'==altered[digest+key.size()]?'e':'f';
+        write(f.json,altered);
+        ARIADNE_TESTING_EXPECT_THROWS(
+            std::invalid_argument,(void)neural_load_snapshot(f.json,f.weights));
+        altered=valid;
+        altered.replace(digest-1u, key.size()+65u, "");
         write(f.json,altered);
         ARIADNE_TESTING_EXPECT_THROWS(
             std::invalid_argument,(void)neural_load_snapshot(f.json,f.weights));
@@ -152,6 +194,18 @@ public:
         ARIADNE_TESTING_EXPECT_THROWS(
             std::invalid_argument,(void)neural_load_snapshot(f.json,f.weights));
         altered=original;
+        // Same dimensions, finite but different weight: reject by identity.
+        std::uint64_t valid_header_len=0u;
+        for (unsigned i=0u;i<8u;++i)
+            valid_header_len |= static_cast<std::uint64_t>(
+                static_cast<unsigned char>(altered[i])) << (8u*i);
+        const auto payload_begin=8u+static_cast<std::size_t>(valid_header_len);
+        altered[payload_begin] = static_cast<char>(
+            static_cast<unsigned char>(altered[payload_begin]) ^ 1u);
+        write(f.weights,altered);
+        ARIADNE_TESTING_EXPECT_THROWS(
+            std::invalid_argument,(void)neural_load_snapshot(f.json,f.weights));
+        altered=original;
         // Byte-for-byte mutation to a NaN in the first payload double.
         std::uint64_t header_len=0u;
         for (unsigned i=0u;i<8u;++i)
@@ -170,6 +224,7 @@ public:
 int main(int argc,char** argv) {
     ARIADNE_TESTING_SUITE("serialization");
     ARIADNE_TESTING_ADD_TEST(TestSerialization,test_exact_binary64_roundtrip);
+    ARIADNE_TESTING_ADD_TEST(TestSerialization,test_sha256_semantics);
     ARIADNE_TESTING_ADD_TEST(TestSerialization,test_manifest_schema_rejection);
     ARIADNE_TESTING_ADD_TEST(TestSerialization,test_safetensors_data_rejection);
     return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc,argv);

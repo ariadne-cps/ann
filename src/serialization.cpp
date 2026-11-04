@@ -23,6 +23,7 @@
  */
 
 #include "neural/serialization.hpp"
+#include "sha256.hpp"
 
 #include <bit>
 #include <cmath>
@@ -320,6 +321,34 @@ void verify_tensor(std::map<std::string,Json> const& tensors,
 
 } // namespace
 
+std::string neural_snapshot_sha256(NeuralParameterSnapshot const& snapshot) {
+    // Domain-separated canonical binary representation, independent of
+    // JSON formatting, Safetensors headers and host byte order.
+    Detail::Sha256 sha;
+    constexpr char domain[] = "ariadne-neural-model";
+    sha.update(std::string_view(domain, sizeof(domain))); // Include NUL.
+    const auto& network = snapshot.network();
+    sha.update_u64(static_cast<std::uint64_t>(network.input_dimension()));
+    sha.update_u64(static_cast<std::uint64_t>(network.layers().size()));
+    for (auto const& layer : network.layers()) {
+        sha.update_u64(static_cast<std::uint64_t>(layer.outputs));
+        unsigned char code = 0u;
+        switch (layer.activation) {
+            case NeuralActivation::Identity: code = 0u; break;
+            case NeuralActivation::Relu: code = 1u; break;
+            case NeuralActivation::Tanh: code = 2u; break;
+            case NeuralActivation::Sigmoid: code = 3u; break;
+            case NeuralActivation::Softplus: code = 4u; break;
+            default: throw std::invalid_argument("Unknown neural activation");
+        }
+        const char encoded = static_cast<char>(code);
+        sha.update(std::string_view(&encoded, 1u));
+    }
+    for (double value : snapshot.values())
+        sha.update_u64(std::bit_cast<std::uint64_t>(value));
+    return sha.hex_digest();
+}
+
 void neural_save_snapshot(NeuralParameterSnapshot const& snapshot,
                           std::string const& manifest_path,
                           std::string const& safetensors_path) {
@@ -328,7 +357,7 @@ void neural_save_snapshot(NeuralParameterSnapshot const& snapshot,
         throw std::invalid_argument("Snapshot output paths must be distinct");
     const auto& network = snapshot.network();
     ensure_limit(network);
-    std::string manifest = "{\"format\":\"ariadne-neural\",\"version\":1,"
+    std::string manifest = "{\"format\":\"ariadne-neural\","
         "\"numeric\":\"IEEE754-binary64\",\"input_dimension\":"
         + std::to_string(network.input_dimension()) + ",\"layers\":[";
     std::string header = "{";
@@ -352,7 +381,8 @@ void neural_save_snapshot(NeuralParameterSnapshot const& snapshot,
             append64(payload,std::bit_cast<std::uint64_t>(
                 values[layer.biases_offset+n]));
     }
-    manifest += "],\"tensors\":\"safetensors\"}\n";
+    manifest += "],\"tensors\":\"safetensors\",\"snapshot_sha256\":\"" +
+        neural_snapshot_sha256(snapshot) + "\"}\n";
     header += "}";
     if (manifest.size()>max_manifest_bytes ||
         header.size()>max_header_bytes || payload.size()>max_payload_bytes)
@@ -377,8 +407,6 @@ NeuralParameterSnapshot neural_load_snapshot(
     auto manifest = JsonParser(manifest_bytes).parse();
     keys(manifest,6u);
     (void)literal(field(manifest,"format"),"ariadne-neural");
-    if (integer(field(manifest,"version")) != 1u)
-        throw std::invalid_argument("Unsupported neural manifest version");
     (void)literal(field(manifest,"numeric"),"IEEE754-binary64");
     (void)literal(field(manifest,"tensors"),"safetensors");
     const std::size_t inputs = size(field(manifest,"input_dimension"));
@@ -434,7 +462,13 @@ NeuralParameterSnapshot neural_load_snapshot(
             cursor+=8u;
         }
     }
-    return NeuralParameterSnapshot(std::move(network),std::move(values));
+    NeuralParameterSnapshot snapshot(std::move(network),std::move(values));
+    const auto& saved_digest = text(field(manifest,"snapshot_sha256"));
+    if (saved_digest.size() != 64u ||
+        saved_digest.find_first_not_of("0123456789abcdef") != std::string::npos ||
+        saved_digest != neural_snapshot_sha256(snapshot))
+        throw std::invalid_argument("Neural snapshot SHA-256 identity mismatch");
+    return snapshot;
 }
 
 } // namespace Ariadne

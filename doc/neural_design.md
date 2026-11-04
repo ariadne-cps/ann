@@ -253,7 +253,7 @@ not a requirement that every runtime stores tensors identically.
 - Specify element type/precision, array orientation, parameter ordering,
   strides, activation conventions, and treatment of non-finite values.
   Each adapter must map the canonical format to its native representation.
-- Store canonical checkpoints using a versioned, backend-independent
+- Store canonical checkpoints using a documented, backend-independent
   representation that can preserve the intended numeric values/bit patterns.
   External framework checkpoints and optimizer states may be supported as
   separate, backend-specific artifacts; they do not replace the canonical
@@ -287,12 +287,12 @@ interfaces with different purposes:
   operators must fail with an informative error, never silently approximate
   or discard parts of a model. No mandatory ONNX runtime dependency is
   introduced into the Neural core.
-- **Canonical storage: JSON + Safetensors.** Persist versioned Neural
+- **Canonical storage: JSON + Safetensors.** Persist Neural
   topology, activations, declared numeric representation, tensor
   names/shapes, semantic conventions, and compatibility metadata in a
   documented JSON manifest. Store weights and biases in an open
   Safetensors file, not an executable pickle or a new ad hoc binary
-  container. The manifest schema is an openly documented, versioned
+  container. The manifest has a single supported current schema as an
   *Ariadne-specific* contract; Safetensors by itself does not describe
   a complete neural-network architecture.
 
@@ -301,13 +301,12 @@ The canonical representation remains
 Safetensors object types enter the mathematical model or execution APIs.
 For the existing binary64 snapshots, internal round trips must preserve
 each parameter's binary representation, including signed zero, and
-reject mismatched dimensions, unknown versions, missing/duplicate
+reject mismatched dimensions, missing/duplicate
 tensors, invalid types and malformed metadata. Import/export must
 apply resource limits when parsing untrusted files. Model identity
 and future certificate references should be bound to a well-defined
 canonical topology, activation semantics and exact parameter values;
-the precise schema version and digest construction remain to be specified
-before implementation.
+the SHA-256 digest scheme is defined in the M5 implementation section.
 
 ONNX conversion has a distinct **semantic equivalence** obligation:
 mapping `Gemm`, transpositions, activations and parameter types to Neural
@@ -693,7 +692,7 @@ the `pyariadne` binding. Full cross-platform CI remains the acceptance
 gate; performance, parallel batch execution, persistence/transfer
 learning, and validated training guarantees remain outside M4.
 No serialization format is implemented: the agreed M5 storage plan
-remains versioned JSON plus Safetensors and ONNX for portability.
+remains JSON plus Safetensors and ONNX for portability.
 
 ### M4 performance benchmark baseline (2026-11-03)
 
@@ -752,7 +751,7 @@ established by implementation alone.
 
 ### M5 — Persistence, freezing, and transfer learning
 
-**Deliverables:** Backend-neutral versioned canonical JSON manifest plus
+**Deliverables:** Backend-neutral canonical JSON manifest plus
 Safetensors parameter checkpoint, following the agreed open-format decision
 above; ONNX is the separate portable model-exchange interface. Specify exact
 binary64 preservation, schema compatibility and explicit conversion failures.
@@ -770,27 +769,27 @@ attached to a snapshot must be invalidated by relevant changes.
 
 ### M5 canonical persistence implementation (2026-11-04)
 
-**Implementation status: initial serialization slice, CI pending.** Public
+**Implementation status: canonical persistence implemented, digest extension CI pending.** Public
 `neural_save_snapshot(snapshot, manifest_path, safetensors_path)` and
 `neural_load_snapshot(manifest_path, safetensors_path)` in C++ and Python
 write/read two separate files, with no mandatory new dependency:
-a versioned JSON manifest and a Safetensors F64 tensor collection.
+a single current-format JSON manifest and a Safetensors F64 tensor collection.
 The format is purposefully narrower than arbitrary ONNX or Safetensors
 graphs and represents only the implemented sequential dense Neural
 topology. The frozen network/snapshot remains the canonical in-memory type.
 
-**Manifest schema v1** (example):
+**Current manifest schema** (example):
 ```json
 {
   "format": "ariadne-neural",
-  "version": 1,
   "numeric": "IEEE754-binary64",
   "input_dimension": 2,
   "layers": [
     {"outputs": 3, "activation": "tanh"},
     {"outputs": 1, "activation": "identity"}
   ],
-  "tensors": "safetensors"
+  "tensors": "safetensors",
+  "snapshot_sha256": "<64 lowercase hexadecimal characters>"
 }
 ```
 
@@ -817,15 +816,35 @@ for parameter payload, and 4096 layers. Import failures are explicit.
 
 **Non-goals and limitations:** A two-file write is not atomic; callers
 must publish both files together and secure against concurrent writers.
-The JSON manifest currently identifies a topology, not a cryptographic
-digest of its partner payload. A malicious or accidental substitution
-of a same-shaped Safetensors file cannot yet be detected; no certificate
-may treat this file pair as a stable, authenticated model identity.
-Manifest digest/canonicalization, atomic publication, trainable/frozen
-groups, output-head replacement and optimizer-state checkpointing
-remain separate M5 work. ONNX remains the agreed, later portability
+The manifest now records a SHA-256 digest of the canonical binary
+topology and parameter bits; loading fails on a mismatch, including a
+same-shaped weight swap or activation change. There is exactly one
+supported current schema, with no manifest version field and no backward
+compatibility with earlier checkpoints. The digest is a content identifier,
+not a signature, provenance claim or authentication; replacing both files
+and recomputing the digest is not prevented. Atomic publication,
+optimizer-state checkpointing and persistent freeze masks remain separate
+M5 work. ONNX remains the agreed, later portability
 interface and is not implemented by this slice. No validation or
 interval enclosure is implied by successful loading.
+
+### M5 canonical SHA-256 snapshot identity (2026-11-04)
+
+**Implementation status: implemented, CI pending.** The manifest contains
+`snapshot_sha256`, the lowercase SHA-256 of a domain-separated canonical
+binary stream: the ASCII string `ariadne-neural-model` plus NUL byte;
+input dimension (little-endian u64); layer count (little-endian u64);
+for each layer, output count (little-endian u64) and activation tag
+(one byte: Identity=0, Relu=1, Tanh=2, Sigmoid=3, Softplus=4); then
+all canonical row-major weight and bias IEEE-754 binary64 bit patterns
+(each little-endian u64). The digest is independent of JSON layout and
+Safetensors header formatting. Signed zero contributes its original bits.
+The loader validates shapes and numeric finiteness before checking the
+digest. This is content integrity, not cryptographic authentication or
+certificate validation. A self-contained SHA-256 implementation follows
+FIPS 180-4 without adding a mandatory crypto library. The current-only
+schema intentionally removes the earlier `version` field; legacy
+manifests are rejected, not migrated. The file pair is still non-atomic.
 
 ### M5 layer freezing and transfer-learning slice (2026-11-04)
 
@@ -968,6 +987,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
+| 2026-11-04 | M5 canonical snapshot SHA-256 and current-only manifest | Implemented; CI pending | Removed manifest version field rather than introducing v1/v2 compatibility; required SHA-256 digest over canonical topology, activation tags and exact binary64 parameters. Added C++ and Python API neural_snapshot_sha256, FIPS SHA-256 implementation, same-shaped finite payload tamper detection, signed-zero identity checks and independent Python hashlib reference. Legacy manifests without digest intentionally rejected. Two-file publication remains non-atomic; no signature/authentication or optimizer-state checkpoint. |
 | 2026-11-04 | M5 per-layer freezing, output head replacement and fine-tuning | Implemented; CI pending | Added optional per-layer trainable mask to native CPU training and explicit rejection of zero trainable layers or malformed masks; SGD momentum/decay and AdamW update only trainable parameters, preserving frozen binary64 values exactly. Added seeded output head replacement preserving all preceding layers bit-for-bit, independent optimizer state for fine-tuning, C++/Python tests and tutorials. No serialization of trainable masks, optimizer states, cryptographic identity or ONNX. |
 | 2026-11-04 | Fix JSON field error text after C-string key change | Implemented; CI pending | Corrected compile error in serialization parser: after changing field() key type to const char* for GCC 13 -Wdangling-reference, the missing-field exception attempted to add two C-string pointers. Explicitly construct std::string before concatenating the key. Previously published intermediate commit c0f6964 had build failures across compiler configurations; preserve this regression record and verify all workflow builds on the updated commit. |
 | 2026-11-04 | Remove Function dependency from Neural | Implemented; CI pending | Removed Function gitlink, submodule, direct and transitive dependency assertions; retained Threading for planned parallel training, CLI and Logging. Refactored Python bindings to depend on PythonCommon + pybind11 directly, adding PythonCommon as a pinned submodule instead of using pyariadne-function. Preserves combined pyariadne entry for standalone and parent repositories; C++20 neural model/inference/training/serialization logic unchanged. Future neuro-symbolic module consumes Neural and Symbolic (which depends on Function), not vice versa. Full CI and embedding integration pending. |
