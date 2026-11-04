@@ -4,6 +4,7 @@ add_library(NEURAL_SRC OBJECT
     backend.cpp
     inference.cpp
     training.cpp
+    serialization.cpp
 )
 target_include_directories(NEURAL_SRC PRIVATE
     "${PROJECT_SOURCE_DIR}/include/neural"

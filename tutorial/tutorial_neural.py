@@ -20,7 +20,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ariadne Neural.  If not, see <https://www.gnu.org/licenses/>.
 
-"""M2 canonical model and reference CPU inference."""
+"""Native CPU inference, training and canonical model persistence."""
+
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from pyariadne import (
     NeuralActivation,
@@ -32,6 +35,8 @@ from pyariadne import (
     NeuralOperation,
     NeuralParameterSnapshot,
     neural_version,
+    neural_save_snapshot,
+    neural_load_snapshot,
 )
 
 if __name__ == "__main__":
@@ -57,3 +62,10 @@ if __name__ == "__main__":
     for _ in range(70):
         trainer.train_batch([[1.0]], [[2.0]])
     print("Training steps:", trainer.steps(), "final MSE:", trainer.loss_batch([[1.0]], [[2.0]]))
+
+    with TemporaryDirectory(prefix="ariadne-neural-") as directory:
+        manifest = str(Path(directory) / "model.json")
+        tensors = str(Path(directory) / "model.safetensors")
+        neural_save_snapshot(trainer.export_snapshot(), manifest, tensors)
+        restored = neural_load_snapshot(manifest, tensors)
+        print("Reloaded parameter count:", restored.network().parameter_count())

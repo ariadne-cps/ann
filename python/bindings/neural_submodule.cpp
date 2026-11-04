@@ -28,6 +28,7 @@
 #include "neural/network.hpp"
 #include "neural/backend.hpp"
 #include "neural/training.hpp"
+#include "neural/serialization.hpp"
 
 #include <cstddef>
 #include <vector>
@@ -134,6 +135,12 @@ void neural_submodule(pybind11::module& module) {
                pybind11::arg("network"), pybind11::arg("seed"));
     module.def("neural_shuffled_indices", &neural_shuffled_indices,
                pybind11::arg("count"), pybind11::arg("seed"));
+
+    module.def("neural_save_snapshot", &neural_save_snapshot,
+               pybind11::arg("snapshot"), pybind11::arg("manifest_path"),
+               pybind11::arg("safetensors_path"));
+    module.def("neural_load_snapshot", &neural_load_snapshot,
+               pybind11::arg("manifest_path"), pybind11::arg("safetensors_path"));
 
     module.def("neural_backend_available", &neural_backend_available,
                pybind11::arg("backend"));

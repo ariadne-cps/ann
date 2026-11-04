@@ -29,5 +29,6 @@
 #include "neural/network.hpp"
 #include "neural/backend.hpp"
 #include "neural/training.hpp"
+#include "neural/serialization.hpp"
 
 #endif // ARIADNE_NEURAL_MODULE_HPP

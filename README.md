@@ -60,6 +60,25 @@ cmake --install build-release --prefix /path/to/install
 Python bindings require Python 3.11+ development headers and are composed into
 the `pyariadne` module. Set `-DBUILD_PYTHON_BINDINGS=OFF` to disable them.
 
+## Canonical model persistence (M5)
+
+Ariadne Neural saves a frozen network in two open files: a versioned JSON
+manifest describing the dense topology and activations, and a standard
+Safetensors file containing named, row-major F64 weights and biases.
+The binary64 parameter bits (including signed zero) are preserved exactly.
+C++ and Python expose `neural_save_snapshot` and
+`neural_load_snapshot` for this canonical format.
+
+```python
+neural_save_snapshot(snapshot, "model.json", "model.safetensors")
+restored = neural_load_snapshot("model.json", "model.safetensors")
+```
+
+The version-1 schema and strict size/type validation rules are recorded
+in [the design journal](doc/neural_design.md). File pairs must be published
+together; no cryptographic model identity, atomic two-file commit,
+optimizer-state checkpoint or ONNX import/export is implemented yet.
+
 ## Performance benchmark
 
 Build a Release executable to compare the same three training algorithms on

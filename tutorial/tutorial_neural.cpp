@@ -25,6 +25,9 @@
 #include "ariadne-neural.hpp"
 
 #include <iostream>
+#include <cstdio>
+#include <filesystem>
+#include <string>
 #include <vector>
 
 int main() {
@@ -58,5 +61,17 @@ int main() {
     }
     std::cout << "Training steps: " << trainer.steps()
               << " | final MSE: " << trainer.loss_batch({{1.0}}, {{2.0}}) << '\n';
+    // Store the frozen, trained model in two open files and reconstruct it.
+    auto const prefix = std::filesystem::temp_directory_path() /
+        "ariadne_neural_tutorial";
+    const std::string manifest = prefix.string() + ".json";
+    const std::string tensors = prefix.string() + ".safetensors";
+    auto const trained = trainer.export_snapshot();
+    neural_save_snapshot(trained, manifest, tensors);
+    auto const restored = neural_load_snapshot(manifest, tensors);
+    std::cout << "Restored parameters: " << restored.network().parameter_count()
+              << " | first weight: " << restored.values().at(0) << '\n';
+    (void)std::remove(manifest.c_str());
+    (void)std::remove(tensors.c_str());
     return 0;
 }

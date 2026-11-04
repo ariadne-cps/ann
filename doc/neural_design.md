@@ -769,6 +769,65 @@ frozen weights do not change after optimizer steps; both language
 tutorials demonstrate a small fine-tuning workflow. A certificate
 attached to a snapshot must be invalidated by relevant changes.
 
+### M5 canonical persistence implementation (2026-11-04)
+
+**Implementation status: initial serialization slice, CI pending.** Public
+`neural_save_snapshot(snapshot, manifest_path, safetensors_path)` and
+`neural_load_snapshot(manifest_path, safetensors_path)` in C++ and Python
+write/read two separate files, with no mandatory new dependency:
+a versioned JSON manifest and a Safetensors F64 tensor collection.
+The format is purposefully narrower than arbitrary ONNX or Safetensors
+graphs and represents only the implemented sequential dense Neural
+topology. The frozen network/snapshot remains the canonical in-memory type.
+
+**Manifest schema v1** (example):
+```json
+{
+  "format": "ariadne-neural",
+  "version": 1,
+  "numeric": "IEEE754-binary64",
+  "input_dimension": 2,
+  "layers": [
+    {"outputs": 3, "activation": "tanh"},
+    {"outputs": 1, "activation": "identity"}
+  ],
+  "tensors": "safetensors"
+}
+```
+
+For each layer `N`, the Safetensors file has exactly two entries,
+`layers.N.weight` (dtype `F64`, shape `[outputs,inputs]`) and
+`layers.N.bias` (dtype `F64`, shape `[outputs]`), ordered consecutively
+by offsets into the data buffer. The weights are row-major, biases follow
+weights for each layer; no reordering is imposed on the model beyond its
+canonical layout. Safetensors uses an unsigned little-endian 64-bit JSON
+header length; the JSON header maps tensor names to dtype, shape and
+byte offsets relative to the beginning of the payload. F64 payload bytes
+are little-endian IEEE-754 bit patterns, copied with `std::bit_cast` to
+preserve signed zero exactly. No float32 or implicit type conversion.
+
+The loader rejects unknown/duplicate manifest/header fields, missing
+or extra tensors, unsupported activation/dtype/schema, invalid shapes,
+nonconsecutive or overlapping tensor offsets, truncated or trailing
+payloads, nonfinite parameters and dimension/parameter overflows.
+The parser deliberately accepts only unescaped printable ASCII in
+JSON strings (all defined names and schema tokens are ASCII), and
+nonnegative integer fields, rather than providing a general JSON API.
+The limits are 1 MiB each for manifest and Safetensors header, 256 MiB
+for parameter payload, and 4096 layers. Import failures are explicit.
+
+**Non-goals and limitations:** A two-file write is not atomic; callers
+must publish both files together and secure against concurrent writers.
+The JSON manifest currently identifies a topology, not a cryptographic
+digest of its partner payload. A malicious or accidental substitution
+of a same-shaped Safetensors file cannot yet be detected; no certificate
+may treat this file pair as a stable, authenticated model identity.
+Manifest digest/canonicalization, atomic publication, trainable/frozen
+groups, output-head replacement and optimizer-state checkpointing
+remain separate M5 work. ONNX remains the agreed, later portability
+interface and is not implemented by this slice. No validation or
+interval enclosure is implied by successful loading.
+
 ### M6 — Validated inference and numerical enclosures
 
 **Deliverables:** Implement a distinct Ariadne validated evaluator consuming
@@ -881,6 +940,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
+| 2026-11-04 | M5 JSON plus Safetensors persistence | Implemented; CI pending | Introduced version-1 JSON topology manifest and standard Safetensors F64 layer tensors, exact binary64 bit patterns including signed zero, strict input bounds/schema/shape/offset checks, C++/Python save/load API and tests. Remains a two-file non-atomic checkpoint without a cryptographic identity; ONNX, freezing and transfer not yet implemented. No new mandatory dependency. |
 | 2026-11-04 | M4 benchmark GCC Debug lifetime fix | Fixed; CI pending | GCC 13 Debug -Werror=dangling-reference reported an iteration over `trainer.export_snapshot().values()` in benchmark checksum(). Since export_snapshot() returns a temporary and values() returns a reference, retain the snapshot as a named local for the full iteration. Semantics, timings and test coverage are unchanged; keep compiler warnings as errors. Ubuntu GCC Debug build, sanitizer/coverage failures and complete CI require verification on this commit. |
 | 2026-11-04 | M4 optimizer time-to-target benchmark | Implemented; CI pending | Added three-way SGD, SGD with momentum, AdamW comparison with paired seeded workloads, fixed-step median timings and a separate first-passage time-to-target experiment. Each target run includes per-update loss checks; failures to reach the requested loss within max steps are explicitly censored, and no aggregate target time is reported unless all seeds succeed. Added `--seeds`, `--target-loss`, `--max-steps`, updated CI smoke to use small budgets, and revised README. Initial benchmark baseline had GCC Debug and sanitizer/coverage failures; these require separate diagnosis, not a weakening of this benchmark. |
 | 2026-11-03 | M4 benchmark standalone linkage | Fixed; CI pending | The initial macOS Release link failed with `ld: library 'ariadne-threading' not found`. In a standalone Neural build `setup_project_library()` bundles all transitive Threading/Logging object targets into `ariadne-neural`; no independent `ariadne-threading` or `ariadne-logging` target exists. Linked `benchmark_optimizers` only to `ariadne-neural` and the existing `neural` interface, and removed invalid Windows CTest target-file-directory references. No change to benchmark workload, algorithms or performance thresholds. Recheck Release link and Debug smoke on CI. |
