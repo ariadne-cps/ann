@@ -7,7 +7,6 @@ add_library(NEURAL_SRC OBJECT
     serialization.cpp
     checkpoint.cpp
     sha256.cpp
-    validated.cpp
 )
 target_include_directories(NEURAL_SRC PRIVATE
     "${PROJECT_SOURCE_DIR}/include/neural"

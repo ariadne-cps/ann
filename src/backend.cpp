@@ -33,8 +33,8 @@ namespace Ariadne {
 bool neural_backend_available(NeuralBackendKind backend) noexcept {
     switch (backend) {
         case NeuralBackendKind::NativeCpu:
-        case NeuralBackendKind::AriadneValidated:
             return true;
+        case NeuralBackendKind::AriadneValidated:
         case NeuralBackendKind::LibTorch:
         case NeuralBackendKind::Mlx:
         default:
@@ -44,10 +44,7 @@ bool neural_backend_available(NeuralBackendKind backend) noexcept {
 
 bool neural_backend_supports(
     NeuralBackendKind backend, NeuralOperation operation) noexcept {
-    if (backend == NeuralBackendKind::AriadneValidated)
-        return operation == NeuralOperation::ImportSnapshot
-            || operation == NeuralOperation::ValidatedBounds;
-    return backend == NeuralBackendKind::NativeCpu
+    return neural_backend_available(backend)
         && (operation == NeuralOperation::ImportSnapshot
             || operation == NeuralOperation::Inference
             || operation == NeuralOperation::BatchInference
@@ -87,11 +84,6 @@ std::vector<std::vector<double>> NeuralExecutionSession::infer_batch(
     std::vector<std::vector<double>> const& inputs) const {
     require(NeuralOperation::BatchInference);
     return NeuralCpu::infer_batch(snapshot_, inputs);
-}
-std::vector<NeuralInterval> NeuralExecutionSession::validated_bounds(
-    std::vector<NeuralInterval> const& inputs) const {
-    require(NeuralOperation::ValidatedBounds);
-    return neural_validated_bounds(snapshot_, inputs);
 }
 NeuralGradientResult NeuralExecutionSession::differentiate(
     std::vector<double> const& input,

@@ -38,21 +38,12 @@ public:
 
     void test_capabilities_are_truthful() {
         ARIADNE_TESTING_PROVE(neural_backend_available(NeuralBackendKind::NativeCpu));
-        for (auto kind : {NeuralBackendKind::LibTorch,
+        for (auto kind : {NeuralBackendKind::AriadneValidated,
+                          NeuralBackendKind::LibTorch,
                           NeuralBackendKind::Mlx}) {
             ARIADNE_TESTING_PROVE(!neural_backend_available(kind));
             ARIADNE_TESTING_PROVE(!neural_backend_supports(kind, NeuralOperation::ImportSnapshot));
         }
-        ARIADNE_TESTING_PROVE(neural_backend_available(
-            NeuralBackendKind::AriadneValidated));
-        ARIADNE_TESTING_PROVE(neural_backend_supports(
-            NeuralBackendKind::AriadneValidated,NeuralOperation::ValidatedBounds));
-        ARIADNE_TESTING_PROVE(!neural_backend_supports(
-            NeuralBackendKind::AriadneValidated,NeuralOperation::Inference));
-        ARIADNE_TESTING_PROVE(!neural_backend_supports(
-            NeuralBackendKind::AriadneValidated,NeuralOperation::InputDerivatives));
-        ARIADNE_TESTING_PROVE(!neural_backend_supports(
-            NeuralBackendKind::AriadneValidated,NeuralOperation::Training));
         ARIADNE_TESTING_PROVE(neural_backend_supports(
             NeuralBackendKind::NativeCpu, NeuralOperation::ImportSnapshot));
         for (auto op : {NeuralOperation::Inference, NeuralOperation::BatchInference,
@@ -93,13 +84,8 @@ public:
             (void)NeuralExecutionSession(parameters, NeuralBackendKind::LibTorch));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
             (void)NeuralExecutionSession(parameters, NeuralBackendKind::Mlx));
-        NeuralExecutionSession validated(parameters,NeuralBackendKind::AriadneValidated);
-        ARIADNE_TESTING_PROVE(validated.supports(NeuralOperation::ValidatedBounds));
-        ARIADNE_TESTING_PROVE(!validated.supports(NeuralOperation::Inference));
-        ARIADNE_TESTING_EXPECT_THROWS(std::logic_error,
-            (void)validated.infer({2.0}));
-        auto const enclosure=validated.validated_bounds({{1.0,2.0}});
-        ARIADNE_TESTING_EXPECT_EQUAL(enclosure.size(),std::size_t{1});
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            (void)NeuralExecutionSession(parameters, NeuralBackendKind::AriadneValidated));
     }
 
     void test_cpu_forward() {

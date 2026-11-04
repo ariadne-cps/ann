@@ -15,8 +15,6 @@ sum or mean reductions, plus native-CPU sequential minibatch training with
 MSE and binary cross entropy with logits, SGD (optionally with momentum)
 and AdamW. Deterministic seeded initialization and sample shuffling are provided.
 Supported layer activations are identity, ReLU, tanh, sigmoid and softplus.
-M6 introduces rigorous, directed-rounding interval-bound propagation via
-Ariadne Numeric, independently from approximate CPU inference.
 Fine-tuning supports per-layer trainability masks (with exact freezing of
 unchanged parameters for SGD and AdamW) and deterministic replacement of the
 final dense output head. A new training session resets optimizer state; masks
@@ -29,7 +27,6 @@ capability queries, CPU inference, derivatives and training.
 
 Direct Git submodules, pinned to specific commits:
 
-- [Numeric](https://github.com/ariadne-cps/numeric) (`ss/num`, rigorous interval bounds).
 - [Threading](https://github.com/ariadne-cps/threading) (`ss/thr`, for scheduling and Logging).
 - [Configuration](https://github.com/ariadne-cps/configuration) (`ss/cfg`, for CMake).
 - [Testing](https://github.com/ariadne-cps/testing) (`ss/tst`, for tests).
@@ -73,31 +70,6 @@ cmake --install build-release --prefix /path/to/install
 
 Python bindings require Python 3.11+ development headers and are composed into
 the `pyariadne` module. Set `-DBUILD_PYTHON_BINDINGS=OFF` to disable them.
-
-## Validated interval-bound propagation (M6)
-
-A separate `AriadneValidated` backend uses Ariadne Numeric's outwardly
-rounded `FloatDPBounds` to enclose every output for a finite input box.
-All model parameters and input endpoints are treated as exact binary64 values;
-activation intervals use directed-rounding implementations for ReLU, tanh,
-sigmoid and softplus. No approximate CPU evaluation is silently substituted.
-
-```python
-from pyariadne import (
-    NeuralBackendKind, NeuralExecutionSession, NeuralInterval,
-)
-validated = NeuralExecutionSession(snapshot, NeuralBackendKind.AriadneValidated)
-bounds = validated.validated_bounds([
-    NeuralInterval(-1.0, 1.0), NeuralInterval(0.0, 2.0)
-])
-```
-
-Only `ImportSnapshot` and `ValidatedBounds` capabilities are exposed for
-`AriadneValidated`. Interval-bound propagation may overestimate the output
-range because repeated variables lose dependencies. Nonfinite intermediate
-bounds are rejected; no validated Jacobian, affine/Taylor enclosure or
-tightness guarantee is claimed. Function/Symbolic integration will belong to
-the future `neuro-symbolic` repository.
 
 ## Canonical model persistence (M5)
 

@@ -954,57 +954,25 @@ published bytes after rejected writes, invalid parent directories and
 rejection of incomplete directories. Both tutorials demonstrate the
 new directory API.
 
-### M6 — Validated inference and numerical enclosures
+### M6 — Validated integration boundary (delegated to neuro-symbolic)
 
-**Deliverables:** Implement a distinct Ariadne validated evaluator consuming
-frozen canonical snapshots, with rigorous input-box output enclosures via
-interval bound propagation using Ariadne's directed-rounding/validated numeric
-facilities.
-Extend to derivative enclosures and tighter affine/Taylor propagation
-only after basic inclusions work. Make exact model parameters and their
-conversion into validation arithmetic explicit.
+**Responsibility:** Neural must NOT gain a direct Numeric, Interval,
+Symbolic or Function dependency merely to support mathematical validation.
+It owns frozen canonical binary64 snapshots, topology, activation semantics,
+and approximate CPU evaluation/derivatives. Validated interval-bound
+propagation, exact conversion of model parameters to directed-rounding
+arithmetic, and certified derivative enclosures belong in the future
+`ariadne-cps/neuro-symbolic` repository, which consumes Neural and Ariadne's
+mathematical modules. This milestone remains a contract/design integration
+boundary within Neural, not an evaluator implementation.
 
-**Acceptance:** Bounds are tested against analytic corner cases and
-independent enclosure oracles, including cancellation and activation
-extrema. Sampling is an additional falsification technique, not a proof.
-No floating-point approximate result may be silently relabeled
-validated. Document domain, parameter, rounding, and backend assumptions.
-
-### M6 native Ariadne Numeric interval propagation (2026-11-04)
-
-**Implementation status: first slice implemented, cross-platform CI pending.**
-Neural now directly depends on Numeric alongside Threading; Function and
-Symbolic remain absent. The new `neural_validated_bounds(snapshot, box)`
-uses `FloatDPBounds`, with exact binary64 scalar embedding for model
-weights/biases and input endpoints. All affine additions and products
-use directed outward rounding. Activations are evaluated as intervals
-using Ariadne Numeric's existing monotone `tanh`, `sigmoid`,
-`softplus`, `max(x,0)` for ReLU and identity. All intermediate
-enclosures must be finite or evaluation throws; no false finite result
-is returned when overflow is encountered. Inputs require finite ordered
-endpoints and a vector of exactly the input dimension. Public result
-`NeuralInterval` contains lower/upper binary64 endpoints.
-
-`AriadneValidated` is advertised as an actually available backend,
-but implements **only** ImportSnapshot and ValidatedBounds. It rejects
-approximate Inference, BatchInference, derivatives and Training.
-`NativeCpu` continues to reject ValidatedBounds. This explicit
-capability split prevents accidentally relabeling approximate results
-as rigorous. Both C++ and Python bindings offer the standalone
-`neural_validated_bounds` function and validated session method.
-The public interface keeps Numeric types in the implementation
-rather than exposing `FloatDPBounds` directly.
-
-C++ `test_validated.cpp` tests exact affine corner extrema,
-cancellation, interval composition, the five activation types,
-sampling-based falsification and malformed/infinite/overflow inputs.
-Python `test_network.py` checks capability isolation, analytical
-interval bounds and sampled enclosures. Sample inclusion is **not**
-a proof; correctness relies on Numeric's directed-rounding primitives.
-The initial milestone provides natural interval extensions only,
-without derivative enclosures, tightened affine/Taylor arithmetic
-or validated mixed-precision model transfer. Full CI and additional
-independent enclosure oracles remain acceptance work.
+**Acceptance in Neural:** The standalone model API exposes enough immutable
+information to implement such an adapter downstream; dependency checks
+confirm no Numeric/Interval/Symbolic/Function submodule is added. Existing
+`AriadneValidated` enum values are reserved/unsupported in Neural until
+an explicitly external integration is designed. No approximate inference
+is advertised as validated. Mathematical inclusion/oracle tests belong
+to the downstream implementation, not to the Neural CI.
 
 ### M7 — Structural constraints and construction guarantees
 
@@ -1021,20 +989,21 @@ across initialization/training/checkpoint transfer, and no reliance on
 soft loss penalties as a proof. Generic LP/NLP dependencies are not
 introduced without an explicit design and dependency-DAG review.
 
-### M8 — Function interoperability and Reasoning readiness
+### M8 — Neuro-symbolic interoperability boundary (delegated)
 
-**Deliverables:** A Function-compatible view of frozen networks and,
-where appropriate, specialized numerical bounds and input derivatives.
-Prove API boundaries and smoothness expectations rather than assuming
-that every activation is differentiable. Provide a standalone
-composition example that does not make Neural depend on Reasoning, SMT,
-System, or Evolution.
+**Deliverables in Neural:** Keep the public frozen snapshot and activation
+contract stable and provide standalone C++/Python interoperability fixtures
+without importing downstream mathematical modules. All Function-compatible
+adapters, symbolic expansion, differentiation of expressions, interval
+evaluation, and reasoning-oriented composition belong in the future
+`ariadne-cps/neuro-symbolic` repository (and proof orchestration in
+`reasoning`).
 
-**Acceptance:** Small smooth networks yield consistent native,
-Function-based, and validated evaluations. Record exact conversion
-semantics and performance costs. The existing Barr3 fixture is a
-follow-on integration/performance benchmark for Reasoning or SMT;
-an `UNKNOWN` solver result is not an accepted certificate.
+**Acceptance:** Neural remains buildable independently of Function, Symbolic,
+Numeric and Reasoning. Downstream neuro-symbolic tests must establish
+conversion semantics, differentiability assumptions and enclosure
+correctness. The existing Barr3 fixture remains a future downstream
+integration/performance benchmark; an `UNKNOWN` result is not a certificate.
 
 ### M9 — Performance and optional backend completion
 
@@ -1060,9 +1029,9 @@ M0 baseline CI
   -> M3 derivatives
   -> M4 training
   -> M5 persistence / transfer
-  -> M6 validated enclosures
+  -> M6 validated integration boundary (in neuro-symbolic)
   -> M7 structural guarantees
-  -> M8 Function interoperability / Reasoning readiness
+  -> M8 neuro-symbolic interoperability boundary
   -> M9 optional optimization / backends
 ```
 
@@ -1102,7 +1071,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
-| 2026-11-04 | M6 Numeric-backed validated interval enclosures | Implemented; CI pending | Introduced direct Numeric submodule dependency, FloatDPBounds interval bound propagation with outward rounding and all five activations, independent NeuralInterval public bounds and actual AriadneValidated capability reporting. Added C++/Python mathematical oracle, sampling and malformed-input tests, README and tutorial. No Function/Symbolic dependency; no validated derivatives, tightened enclosures or numerical-backend fallback. |
+| 2026-11-04 | Revert misallocated M6 validated evaluator | Corrected architecture; CI pending | Reverted commit f24f861 (Numeric-backed interval propagation, Numeric gitlink, CMake and Python/CPU backend changes and tests) because validated mathematics belongs downstream in future neuro-symbolic. Neural must retain independent frozen model/inference/training responsibilities and not depend on Numeric, Interval, Function or Symbolic. Reworded M6 and M8 roadmap as downstream integration boundaries. The reserved AriadneValidated backend remains explicitly unavailable; CI verification pending. |
 | 2026-11-04 | M5 atomic directory publication | Implemented; CI pending | Added C++/Python model-only and training checkpoint directory APIs. Staging in a sibling directory uses existing JSON/Safetensors serialization and validates round trips before one rename makes a complete immutable checkpoint visible. Existing destinations are rejected; staging cleanup on failure; concurrency no-replace is not portable and power-loss durability is not guaranteed. Added cross-language tests and tutorials without changing file formats or introducing versioning. |
 | 2026-11-04 | M5 checkpoint header compilation fix and memory efficiency | Fixed; CI pending | Corrected malformed C++ JSON header string literals from the initial training checkpoint commit using C++ raw string literals; fixed both the syntax and ensured exact Safetensors metadata structure. Changed canonical training digest code to iterate over const pointers to moment vectors rather than copying potentially large arrays. Initial checkpoint commit failed sanitizer build; re-run all compilers and tests on the corrected code. |
 | 2026-11-04 | M5 resumable native CPU optimizer checkpoints | Implemented; full CI pending | Added NeuralTrainingCheckpoint and native session export/restore preserving SGD momentum or AdamW first/second moments, optimizer options, loss, layer trainability and update counter. Added separate optimizer Safetensors file with exact F64 moments, strict metadata and SHA-256 digest bound to the model snapshot; loader rejects mismatched files and tampering. Added C++/Python deterministic replay and corruption tests plus both tutorials, README and design documentation. No new dependencies; three-file persistence is non-atomic, not authenticated, and external data-stream RNG state is not captured. |

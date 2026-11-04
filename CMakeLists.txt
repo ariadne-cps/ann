@@ -22,22 +22,11 @@ if(EXISTS "${PROJECT_SOURCE_DIR}/.git")
     require_same_dependency_commit(Configuration CHAINS
         "configuration"
         "threading|configuration"
-        "numeric|configuration"
         "testing|configuration"
     )
     require_same_dependency_commit(Testing CHAINS
         "testing"
         "threading|testing"
-        "numeric|testing"
-    )
-    require_same_dependency_commit(Logging CHAINS
-        "threading|logging"
-        "numeric|logging"
-    )
-    require_same_dependency_commit(Utility CHAINS
-        "threading|logging|utility"
-        "numeric|foundation|utility"
-        "numeric|logging|utility"
     )
 endif()
 
@@ -52,7 +41,7 @@ target_include_directories(neural INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/ariadne-neural>
 )
-target_link_libraries(neural INTERFACE threading numeric)
+target_link_libraries(neural INTERFACE threading)
 
 add_subdirectory(src)
 target_link_libraries(NEURAL_SRC PRIVATE neural)
