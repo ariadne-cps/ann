@@ -827,6 +827,35 @@ remain separate M5 work. ONNX remains the agreed, later portability
 interface and is not implemented by this slice. No validation or
 interval enclosure is implied by successful loading.
 
+### M5 layer freezing and transfer-learning slice (2026-11-04)
+
+**Implementation status: implemented, CI pending.** A
+`NeuralTrainingSession` accepts an optional per-layer Boolean trainability
+mask. The empty mask means all layers trainable; nonempty masks must match
+the network's layer count and contain at least one trainable layer.
+Frozen layers retain their exact binary64 weights and biases for SGD with
+momentum and AdamW, including when weight decay is enabled. This is a true
+optimizer-update freeze, not merely a zero-gradient substitution. All
+samples still propagate through frozen layers to obtain gradients for
+trainable layers. The mask is immutable for the life of the session.
+
+`neural_replace_output_head(source, new_head, seed)` creates a new
+snapshot with the same input topology and all preceding layers unchanged
+bit-for-bit. It replaces only the final dense layer with a fresh
+seeded Xavier-uniform head and zero biases. The final layer may have
+different output dimensions and activation. The source remains unchanged.
+For a single-layer network, replacing the head replaces the entire model.
+This is not a generic internal layer surgery API.
+
+A new training session (possibly with an unfrozen mask) is built from
+the exported snapshot. Optimizer moments and step counters are reset
+rather than silently transferred between different model topologies or
+trainability policies. Optimizer-state serialization, per-parameter
+rather than per-layer masks, persistent freeze metadata, cryptographic
+model identity and atomic two-file checkpoints remain M5 work.
+Neither snapshots nor serialization store the training mask.
+Replacing any parameter invalidates prior model-specific certificates.
+
 ### M6 — Validated inference and numerical enclosures
 
 **Deliverables:** Implement a distinct Ariadne validated evaluator consuming
@@ -939,6 +968,7 @@ must **not** carry this header.
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
+| 2026-11-04 | M5 per-layer freezing, output head replacement and fine-tuning | Implemented; CI pending | Added optional per-layer trainable mask to native CPU training and explicit rejection of zero trainable layers or malformed masks; SGD momentum/decay and AdamW update only trainable parameters, preserving frozen binary64 values exactly. Added seeded output head replacement preserving all preceding layers bit-for-bit, independent optimizer state for fine-tuning, C++/Python tests and tutorials. No serialization of trainable masks, optimizer states, cryptographic identity or ONNX. |
 | 2026-11-04 | Fix JSON field error text after C-string key change | Implemented; CI pending | Corrected compile error in serialization parser: after changing field() key type to const char* for GCC 13 -Wdangling-reference, the missing-field exception attempted to add two C-string pointers. Explicitly construct std::string before concatenating the key. Previously published intermediate commit c0f6964 had build failures across compiler configurations; preserve this regression record and verify all workflow builds on the updated commit. |
 | 2026-11-04 | Remove Function dependency from Neural | Implemented; CI pending | Removed Function gitlink, submodule, direct and transitive dependency assertions; retained Threading for planned parallel training, CLI and Logging. Refactored Python bindings to depend on PythonCommon + pybind11 directly, adding PythonCommon as a pinned submodule instead of using pyariadne-function. Preserves combined pyariadne entry for standalone and parent repositories; C++20 neural model/inference/training/serialization logic unchanged. Future neuro-symbolic module consumes Neural and Symbolic (which depends on Function), not vice versa. Full CI and embedding integration pending. |
 | 2026-11-04 | M5 GCC 13 dangling-reference diagnostic | Implemented; CI pending | Replaced temporary std::string argument in JSON field lookup with a literal C-string key, eliminating GCC 13 -Wdangling-reference false positive on references to shape/offsets/layers held in the parsed JSON object; their storage is owned by the Json tree and remains live. No suppression of -Werror or parser validation. Verified source patch; CI not yet completed. |

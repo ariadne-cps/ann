@@ -159,16 +159,40 @@ double uniform01(std::uint64_t& state) {
 NeuralTrainingSession::NeuralTrainingSession(
     NeuralParameterSnapshot initial,
     NeuralOptimizerOptions options,
-    NeuralLossKind loss)
+    NeuralLossKind loss,
+    std::vector<bool> trainable_layers)
     : snapshot_(std::move(initial)),
       options_(options), loss_(loss),
+      trainable_layers_(std::move(trainable_layers)),
+      trainable_parameters_(snapshot_.network().parameter_count(), false),
       first_moment_(snapshot_.network().parameter_count(), 0.0),
       second_moment_(snapshot_.network().parameter_count(), 0.0) {
     validate_optimizer(options_);
     validate_loss(snapshot_.network(), loss_);
+    auto const& layers = snapshot_.network().layers();
+    if (trainable_layers_.empty())
+        trainable_layers_.assign(layers.size(), true);
+    if (trainable_layers_.size() != layers.size())
+        throw std::invalid_argument("Wrong number of trainable neural layers");
+    if (std::none_of(trainable_layers_.begin(), trainable_layers_.end(),
+                     [](bool value) { return value; }))
+        throw std::invalid_argument("Neural training requires a trainable layer");
+    for (std::size_t layer = 0; layer < layers.size(); ++layer) {
+        if (!trainable_layers_[layer]) continue;
+        const std::size_t begin = layers[layer].weights_offset;
+        const std::size_t end = layer + 1u < layers.size()
+            ? layers[layer + 1u].weights_offset
+            : snapshot_.network().parameter_count();
+        for (std::size_t parameter = begin; parameter < end; ++parameter)
+            trainable_parameters_[parameter] = true;
+    }
 }
 
 std::size_t NeuralTrainingSession::steps() const noexcept { return steps_; }
+
+std::vector<bool> const& NeuralTrainingSession::trainable_layers() const noexcept {
+    return trainable_layers_;
+}
 
 NeuralParameterSnapshot NeuralTrainingSession::export_snapshot() const {
     return snapshot_;
@@ -197,6 +221,7 @@ double NeuralTrainingSession::train_batch(
 
     if (options_.kind == NeuralOptimizerKind::Sgd) {
         for (std::size_t i = 0; i < updated.size(); ++i) {
+            if (!trainable_parameters_[i]) continue;
             const double regularized = finite(
                 gradients.parameter_gradient[i] +
                 finite(options_.weight_decay * updated[i]));
@@ -213,6 +238,7 @@ double NeuralTrainingSession::train_batch(
         const double decay_factor = finite(
             1.0 - finite(options_.learning_rate * options_.weight_decay));
         for (std::size_t i = 0; i < updated.size(); ++i) {
+            if (!trainable_parameters_[i]) continue;
             const double g = gradients.parameter_gradient[i];
             first[i] = finite(options_.beta1 * first[i] +
                               (1.0 - options_.beta1) * g);
@@ -250,6 +276,28 @@ NeuralParameterSnapshot neural_initialize_parameters(
             }
         }
     }
+    return NeuralParameterSnapshot(std::move(network), std::move(values));
+}
+
+NeuralParameterSnapshot neural_replace_output_head(
+    NeuralParameterSnapshot const& source,
+    NeuralDenseLayerSpec new_head,
+    std::uint64_t seed) {
+    auto const& old_layers = source.network().layers();
+    std::vector<NeuralDenseLayerSpec> specs;
+    specs.reserve(old_layers.size());
+    for (std::size_t i = 0; i + 1u < old_layers.size(); ++i)
+        specs.push_back({old_layers[i].outputs, old_layers[i].activation});
+    specs.push_back(new_head);
+    NeuralNetwork network(source.network().input_dimension(), std::move(specs));
+    const std::size_t prefix_size = old_layers.back().weights_offset;
+    std::vector<double> values(
+        source.values().begin(), source.values().begin() +
+        static_cast<std::vector<double>::difference_type>(prefix_size));
+    NeuralNetwork head_network(old_layers.back().inputs, {new_head});
+    auto head_values = neural_initialize_parameters(std::move(head_network), seed)
+                           .export_values();
+    values.insert(values.end(), head_values.begin(), head_values.end());
     return NeuralParameterSnapshot(std::move(network), std::move(values));
 }
 

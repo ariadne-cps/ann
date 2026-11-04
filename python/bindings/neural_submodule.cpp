@@ -121,10 +121,13 @@ void neural_submodule(pybind11::module& module) {
         .def_readwrite("epsilon", &NeuralOptimizerOptions::epsilon);
 
     pybind11::class_<NeuralTrainingSession>(module, "NeuralTrainingSession")
-        .def(pybind11::init<NeuralParameterSnapshot, NeuralOptimizerOptions, NeuralLossKind>(),
+        .def(pybind11::init<NeuralParameterSnapshot, NeuralOptimizerOptions, NeuralLossKind,
+                            std::vector<bool>>(),
              pybind11::arg("initial"), pybind11::arg("options"),
-             pybind11::arg("loss") = NeuralLossKind::MeanSquaredError)
+             pybind11::arg("loss") = NeuralLossKind::MeanSquaredError,
+             pybind11::arg("trainable_layers") = std::vector<bool>{})
         .def("steps", &NeuralTrainingSession::steps)
+        .def("trainable_layers", &NeuralTrainingSession::trainable_layers)
         .def("export_snapshot", &NeuralTrainingSession::export_snapshot)
         .def("loss_batch", &NeuralTrainingSession::loss_batch,
              pybind11::arg("inputs"), pybind11::arg("targets"))
@@ -133,6 +136,9 @@ void neural_submodule(pybind11::module& module) {
 
     module.def("neural_initialize_parameters", &neural_initialize_parameters,
                pybind11::arg("network"), pybind11::arg("seed"));
+    module.def("neural_replace_output_head", &neural_replace_output_head,
+               pybind11::arg("source"), pybind11::arg("new_head"),
+               pybind11::arg("seed"));
     module.def("neural_shuffled_indices", &neural_shuffled_indices,
                pybind11::arg("count"), pybind11::arg("seed"));
 

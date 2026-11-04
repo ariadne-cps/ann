@@ -71,6 +71,21 @@ int main() {
     auto const restored = neural_load_snapshot(manifest, tensors);
     std::cout << "Restored parameters: " << restored.network().parameter_count()
               << " | first weight: " << restored.values().at(0) << '\n';
+    // Replace the output head, freeze the trained feature layer and fine-tune.
+    NeuralNetwork base(1, {{2, NeuralActivation::Tanh},
+                           {1, NeuralActivation::Identity}});
+    auto pretrained = neural_initialize_parameters(base, 19);
+    auto transferred = neural_replace_output_head(
+        pretrained, {2, NeuralActivation::Identity}, 29);
+    NeuralTrainingSession fine_tuning(transferred, optimizer,
+        NeuralLossKind::MeanSquaredError, {false, true});
+    auto const preserved_prefix = transferred.values().at(0);
+    for (int step = 0; step < 20; ++step)
+        (void)fine_tuning.train_batch({{1.0}}, {{1.0, -1.0}});
+    std::cout << "Fine-tuning steps: " << fine_tuning.steps()
+              << " | preserved feature weight: "
+              << (fine_tuning.export_snapshot().values().at(0) == preserved_prefix)
+              << '\n';
     (void)std::remove(manifest.c_str());
     (void)std::remove(tensors.c_str());
     return 0;

@@ -37,6 +37,9 @@ from pyariadne import (
     neural_version,
     neural_save_snapshot,
     neural_load_snapshot,
+    neural_initialize_parameters,
+    neural_replace_output_head,
+    NeuralLossKind,
 )
 
 if __name__ == "__main__":
@@ -69,3 +72,19 @@ if __name__ == "__main__":
         neural_save_snapshot(trainer.export_snapshot(), manifest, tensors)
         restored = neural_load_snapshot(manifest, tensors)
         print("Reloaded parameter count:", restored.network().parameter_count())
+
+    # Fine-tune a new output head while retaining the trained feature layer.
+    features = NeuralNetwork(1, [
+        NeuralDenseLayerSpec(2, NeuralActivation.Tanh),
+        NeuralDenseLayerSpec(1, NeuralActivation.Identity),
+    ])
+    pretrained = neural_initialize_parameters(features, 19)
+    transferred = neural_replace_output_head(
+        pretrained, NeuralDenseLayerSpec(2, NeuralActivation.Identity), 29)
+    tuning = NeuralTrainingSession(
+        transferred, optimizer, NeuralLossKind.MeanSquaredError, [False, True])
+    for _ in range(20):
+        tuning.train_batch([[1.0]], [[1.0, -1.0]])
+    print("Fine-tuning steps:", tuning.steps(),
+          "preserved feature weight:",
+          tuning.export_snapshot().values()[0] == transferred.values()[0])

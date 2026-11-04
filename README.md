@@ -15,6 +15,10 @@ sum or mean reductions, plus native-CPU sequential minibatch training with
 MSE and binary cross entropy with logits, SGD (optionally with momentum)
 and AdamW. Deterministic seeded initialization and sample shuffling are provided.
 Supported layer activations are identity, ReLU, tanh, sigmoid and softplus.
+Fine-tuning supports per-layer trainability masks (with exact freezing of
+unchanged parameters for SGD and AdamW) and deterministic replacement of the
+final dense output head. A new training session resets optimizer state; masks
+and optimizer state are not saved in JSON/Safetensors checkpoints.
 C++ and Python interfaces expose model metadata, parameter snapshots, backend
 capability queries, CPU inference, derivatives and training.
 

@@ -37,6 +37,7 @@ from pyariadne import (
     NeuralTrainingSession,
     neural_initialize_parameters,
     neural_shuffled_indices,
+    neural_replace_output_head,
     NeuralNetwork,
     NeuralOperation,
     NeuralParameterSnapshot,
@@ -244,3 +245,38 @@ def test_m4_failure_atomicity():
     options.learning_rate = 0.0
     with pytest.raises(ValueError):
         NeuralTrainingSession(NeuralParameterSnapshot(model, [1.0, 0.0]), options)
+
+
+def test_m5_frozen_layers_and_replaced_output_head():
+    model = NeuralNetwork(1, [
+        NeuralDenseLayerSpec(1, NeuralActivation.Identity),
+        NeuralDenseLayerSpec(1, NeuralActivation.Identity),
+    ])
+    source = NeuralParameterSnapshot(model, [2.0, 1.0, 3.0, -1.0])
+    replacement = neural_replace_output_head(
+        source, NeuralDenseLayerSpec(2, NeuralActivation.Identity), 42)
+    assert replacement.network().output_dimension() == 2
+    assert replacement.values()[:2] == source.values()[:2]
+    assert replacement.values()[-2:] == [0.0, 0.0]
+    assert replacement.values() == neural_replace_output_head(
+        source, NeuralDenseLayerSpec(2, NeuralActivation.Identity), 42).values()
+
+    opt = NeuralOptimizerOptions()
+    opt.learning_rate = 0.05
+    opt.weight_decay = 0.2
+    trainer = NeuralTrainingSession(
+        replacement, opt, NeuralLossKind.MeanSquaredError, [False, True])
+    assert trainer.trainable_layers() == [False, True]
+    trainer.train_batch([[1.0]], [[1.0, -1.0]])
+    assert trainer.export_snapshot().values()[:2] == source.values()[:2]
+    assert trainer.export_snapshot().values() != replacement.values()
+    assert trainer.steps() == 1
+    with pytest.raises(ValueError):
+        NeuralTrainingSession(replacement, opt, NeuralLossKind.MeanSquaredError,
+                              [False])
+    with pytest.raises(ValueError):
+        NeuralTrainingSession(replacement, opt, NeuralLossKind.MeanSquaredError,
+                              [False, False])
+    with pytest.raises(ValueError):
+        neural_replace_output_head(
+            source, NeuralDenseLayerSpec(0, NeuralActivation.Identity), 3)

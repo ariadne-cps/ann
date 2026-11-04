@@ -156,6 +156,99 @@ public:
             neural_shuffled_indices(0, 123).size(), std::size_t{0});
     }
 
+    void test_m5_layer_freeze_sgd_and_adamw() {
+        NeuralNetwork model(1, {{1, NeuralActivation::Identity},
+                                {1, NeuralActivation::Identity}});
+        NeuralParameterSnapshot source(model, {2.0, 1.0, 3.0, -1.0});
+        for (NeuralOptimizerKind kind :
+             {NeuralOptimizerKind::Sgd, NeuralOptimizerKind::AdamW}) {
+            NeuralOptimizerOptions opt = sgd(0.05);
+            opt.kind = kind;
+            opt.weight_decay = 0.25;
+            opt.momentum = kind == NeuralOptimizerKind::Sgd ? 0.5 : 0.0;
+            NeuralTrainingSession trainer(source, opt,
+                NeuralLossKind::MeanSquaredError, {false, true});
+            ARIADNE_TESTING_PROVE(trainer.trainable_layers() ==
+                                  std::vector<bool>({false, true}));
+            auto const initial = trainer.loss_batch({{2.0}}, {{0.0}});
+            for (int i = 0; i < 6; ++i)
+                (void)trainer.train_batch({{2.0}}, {{0.0}});
+            auto const result = trainer.export_snapshot();
+            ARIADNE_TESTING_EXPECT_EQUAL(result.values().at(0), 2.0);
+            ARIADNE_TESTING_EXPECT_EQUAL(result.values().at(1), 1.0);
+            ARIADNE_TESTING_PROVE(result.values().at(2) != 3.0);
+            ARIADNE_TESTING_PROVE(trainer.loss_batch({{2.0}}, {{0.0}}) < initial);
+            ARIADNE_TESTING_EXPECT_EQUAL(trainer.steps(), std::size_t{6});
+            ARIADNE_TESTING_PROVE(source.values() ==
+                                  std::vector<double>({2.0, 1.0, 3.0, -1.0}));
+        }
+    }
+
+    void test_m5_head_replacement_and_fine_tuning() {
+        NeuralNetwork model(2, {{2, NeuralActivation::Tanh},
+                                {1, NeuralActivation::Identity}});
+        auto source = neural_initialize_parameters(model, 11);
+        auto replaced = neural_replace_output_head(
+            source, {2, NeuralActivation::Identity}, 123);
+        auto repeated = neural_replace_output_head(
+            source, {2, NeuralActivation::Identity}, 123);
+        ARIADNE_TESTING_EXPECT_EQUAL(replaced.network().input_dimension(),
+                                     std::size_t{2});
+        ARIADNE_TESTING_EXPECT_EQUAL(replaced.network().output_dimension(),
+                                     std::size_t{2});
+        ARIADNE_TESTING_EXPECT_EQUAL(replaced.network().parameter_count(),
+                                     std::size_t{12});
+        ARIADNE_TESTING_PROVE(replaced.values() == repeated.values());
+        for (std::size_t i = 0; i < 6; ++i)
+            ARIADNE_TESTING_EXPECT_EQUAL(
+                replaced.values().at(i), source.values().at(i));
+        for (std::size_t i = 10; i < 12; ++i)
+            ARIADNE_TESTING_EXPECT_EQUAL(replaced.values().at(i), 0.0);
+        NeuralTrainingSession trainer(replaced, sgd(0.02),
+                                      NeuralLossKind::MeanSquaredError,
+                                      {false, true});
+        auto const before = replaced.values();
+        (void)trainer.train_batch({{1.0, -1.0}}, {{1.0, -1.0}});
+        auto const after = trainer.export_snapshot().export_values();
+        for (std::size_t i = 0; i < 6; ++i)
+            ARIADNE_TESTING_EXPECT_EQUAL(after.at(i), before.at(i));
+        ARIADNE_TESTING_PROVE(after != before);
+        ARIADNE_TESTING_EXPECT_EQUAL(trainer.steps(), std::size_t{1});
+        // Recreating a session from a frozen snapshot explicitly resets moments.
+        NeuralTrainingSession unfreeze(trainer.export_snapshot(), sgd(),
+                                       NeuralLossKind::MeanSquaredError,
+                                       {true, true});
+        ARIADNE_TESTING_EXPECT_EQUAL(unfreeze.steps(), std::size_t{0});
+    }
+
+    void test_m5_invalid_freeze_and_head() {
+        NeuralNetwork model(1, {{1, NeuralActivation::Identity},
+                                {1, NeuralActivation::Identity}});
+        auto const source = NeuralParameterSnapshot(model, {2.0, 1.0, 3.0, 0.0});
+        ARIADNE_TESTING_EXPECT_THROWS(
+            std::invalid_argument,
+            (void)NeuralTrainingSession(source, sgd(),
+                NeuralLossKind::MeanSquaredError, {true}));
+        ARIADNE_TESTING_EXPECT_THROWS(
+            std::invalid_argument,
+            (void)NeuralTrainingSession(source, sgd(),
+                NeuralLossKind::MeanSquaredError, {false, false}));
+        ARIADNE_TESTING_EXPECT_THROWS(
+            std::invalid_argument,
+            (void)neural_replace_output_head(
+                source, {0, NeuralActivation::Identity}, 123));
+        ARIADNE_TESTING_EXPECT_THROWS(
+            std::invalid_argument,
+            (void)neural_replace_output_head(
+                source, {1, static_cast<NeuralActivation>(99)}, 123));
+        ARIADNE_TESTING_PROVE(
+            neural_replace_output_head(
+                source, {1, NeuralActivation::Identity}, 5).values().size() ==
+            source.values().size());
+        ARIADNE_TESTING_PROVE(source.values() ==
+                              std::vector<double>({2.0, 1.0, 3.0, 0.0}));
+    }
+
     void test_validation_and_failure_atomicity() {
         auto opt = sgd();
         opt.learning_rate = 0.0;
@@ -195,6 +288,9 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestTraining, test_minibatch_scaling_and_convergence);
     ARIADNE_TESTING_ADD_TEST(TestTraining, test_bce_logits_and_classification_convergence);
     ARIADNE_TESTING_ADD_TEST(TestTraining, test_deterministic_initialization_and_shuffling);
+    ARIADNE_TESTING_ADD_TEST(TestTraining, test_m5_layer_freeze_sgd_and_adamw);
+    ARIADNE_TESTING_ADD_TEST(TestTraining, test_m5_head_replacement_and_fine_tuning);
+    ARIADNE_TESTING_ADD_TEST(TestTraining, test_m5_invalid_freeze_and_head);
     ARIADNE_TESTING_ADD_TEST(TestTraining, test_validation_and_failure_atomicity);
     return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
 }

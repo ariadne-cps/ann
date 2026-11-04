@@ -71,12 +71,23 @@ struct NeuralOptimizerOptions {
  */
 class NeuralTrainingSession {
 public:
+    /** @brief Create a mutable session with an optional per-layer trainability mask.
+     *
+     *  An empty mask means every layer is trainable. Otherwise there must be
+     *  exactly one boolean per layer; at least one must be trainable. Frozen
+     *  layers retain their exact binary64 values even with weight decay.
+     *  The mask cannot change within a session: to unfreeze layers, construct
+     *  a new session from export_snapshot(), resetting optimizer moments.
+     */
     NeuralTrainingSession(NeuralParameterSnapshot initial,
                           NeuralOptimizerOptions options,
-                          NeuralLossKind loss = NeuralLossKind::MeanSquaredError);
+                          NeuralLossKind loss = NeuralLossKind::MeanSquaredError,
+                          std::vector<bool> trainable_layers = {});
 
     /** @brief Number of completed optimizer steps, not training examples. */
     std::size_t steps() const noexcept;
+    /** @brief Per-layer update mask (true means trainable). */
+    std::vector<bool> const& trainable_layers() const noexcept;
     /** @brief Export a new, independent, immutable parameter snapshot. */
     NeuralParameterSnapshot export_snapshot() const;
     /** @brief Calculate sample-mean objective without updating anything. */
@@ -90,6 +101,8 @@ private:
     NeuralParameterSnapshot snapshot_;
     NeuralOptimizerOptions options_;
     NeuralLossKind loss_;
+    std::vector<bool> trainable_layers_;
+    std::vector<bool> trainable_parameters_;
     std::vector<double> first_moment_;
     std::vector<double> second_moment_;
     std::size_t steps_ = 0;
@@ -102,6 +115,18 @@ private:
  */
 NeuralParameterSnapshot neural_initialize_parameters(NeuralNetwork network,
                                                        std::uint64_t seed);
+
+/** @brief Return a new snapshot with the final dense layer replaced.
+ *
+ *  Every preceding layer, including its exact binary64 parameter bits,
+ *  remains unchanged. The new output head is Xavier-uniform initialized
+ *  using the supplied seed with zero biases. Changing the output layer
+ *  creates a new model identity; no optimizer state is transferred.
+ */
+NeuralParameterSnapshot neural_replace_output_head(
+    NeuralParameterSnapshot const& source,
+    NeuralDenseLayerSpec new_head,
+    std::uint64_t seed);
 
 /** @brief Return seeded Fisher-Yates permutation of 0..count-1. */
 std::vector<std::size_t> neural_shuffled_indices(std::size_t count,
