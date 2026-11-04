@@ -423,9 +423,10 @@ std::string training_sha256(NeuralTrainingCheckpoint const& checkpoint) {
     sha.update_u64(static_cast<std::uint64_t>(checkpoint.trainable_layers.size()));
     const auto mask=mask_text(checkpoint.trainable_layers);
     sha.update(mask);
-    for (auto const& moment : {checkpoint.first_moment,checkpoint.second_moment}) {
-        sha.update_u64(static_cast<std::uint64_t>(moment.size()));
-        for (double value : moment)
+    // Iterate over the moment buffers without copying either large vector.
+    for (auto const* moment : {&checkpoint.first_moment, &checkpoint.second_moment}) {
+        sha.update_u64(static_cast<std::uint64_t>(moment->size()));
+        for (double value : *moment)
             sha.update_u64(std::bit_cast<std::uint64_t>(value));
     }
     return sha.hex_digest();
@@ -599,24 +600,27 @@ void neural_save_training_checkpoint(
     const auto count=checkpoint.snapshot.network().parameter_count();
     const auto byte_count=count*8u;
     const auto& o=checkpoint.options;
-    std::string header = "{"__metadata__":{"format":"ariadne-neural-training","
-        ""snapshot_sha256":"" + neural_snapshot_sha256(checkpoint.snapshot) + "","
-        ""checkpoint_sha256":"" + training_sha256(checkpoint) + "","
-        ""optimizer":"" + optimizer_name(o.kind) + "","
-        ""loss":"" + loss_name(checkpoint.loss) + "","
-        ""steps":"" + std::to_string(checkpoint.steps) + "","
-        ""trainable_layers":"" + mask_text(checkpoint.trainable_layers) + "","
-        ""learning_rate":"" + hex_bits(o.learning_rate) + "","
-        ""momentum":"" + hex_bits(o.momentum) + "","
-        ""weight_decay":"" + hex_bits(o.weight_decay) + "","
-        ""beta1":"" + hex_bits(o.beta1) + "","
-        ""beta2":"" + hex_bits(o.beta2) + "","
-        ""epsilon":"" + hex_bits(o.epsilon) + ""},"
-        ""first_moment":{"dtype":"F64","shape":[" + std::to_string(count) +
-        "],"data_offsets":[0," + std::to_string(byte_count) + "]},"
-        ""second_moment":{"dtype":"F64","shape":[" + std::to_string(count) +
-        "],"data_offsets":[" + std::to_string(byte_count) + "," +
-        std::to_string(byte_count*2u) + "]}}";
+    std::string header =
+        R"({"__metadata__":{"format":"ariadne-neural-training","snapshot_sha256":")"
+        + neural_snapshot_sha256(checkpoint.snapshot)
+        + R"(","checkpoint_sha256":")" + training_sha256(checkpoint)
+        + R"(","optimizer":")" + optimizer_name(o.kind)
+        + R"(","loss":")" + loss_name(checkpoint.loss)
+        + R"(","steps":")" + std::to_string(checkpoint.steps)
+        + R"(","trainable_layers":")" + mask_text(checkpoint.trainable_layers)
+        + R"(","learning_rate":")" + hex_bits(o.learning_rate)
+        + R"(","momentum":")" + hex_bits(o.momentum)
+        + R"(","weight_decay":")" + hex_bits(o.weight_decay)
+        + R"(","beta1":")" + hex_bits(o.beta1)
+        + R"(","beta2":")" + hex_bits(o.beta2)
+        + R"(","epsilon":")" + hex_bits(o.epsilon)
+        + R"("},"first_moment":{"dtype":"F64","shape":[)"
+        + std::to_string(count)
+        + R"(],"data_offsets":[0,)" + std::to_string(byte_count)
+        + R"(]},"second_moment":{"dtype":"F64","shape":[)"
+        + std::to_string(count)
+        + R"(],"data_offsets":[)" + std::to_string(byte_count)
+        + "," + std::to_string(byte_count*2u) + "]}}";
     if (header.size()>max_header_bytes)
         throw std::invalid_argument("Training checkpoint header exceeds size limit");
     std::string binary;
