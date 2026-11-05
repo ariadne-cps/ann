@@ -154,6 +154,165 @@ public:
             ARIADNE_TESTING_EXPECT_EQUAL(perm[i], i);
         ARIADNE_TESTING_EXPECT_EQUAL(
             neural_shuffled_indices(0, 123).size(), std::size_t{0});
+        // For count=3 the rejection threshold is 2^64 mod 3 == 1. This seed
+        // makes the first splitmix64 draw exactly 0, below the threshold, so
+        // the unbiased rejection-sampling retry runs before a valid draw.
+        auto retried = neural_shuffled_indices(3, 7046029254386353131ULL);
+        std::sort(retried.begin(), retried.end());
+        ARIADNE_TESTING_PROVE(
+            (retried == std::vector<std::size_t>{0u, 1u, 2u}));
+    }
+
+    void test_optimizer_loss_and_batch_validation() {
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        const double inf = std::numeric_limits<double>::infinity();
+        auto expect_invalid = [this](NeuralOptimizerOptions const& o) {
+            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                (void)NeuralTrainingSession(affine(), o));
+        };
+        // Each clause of validate_optimizer, exercised one at a time.
+        for (double bad : {nan, inf}) {
+            auto o = sgd(); o.learning_rate = bad; expect_invalid(o);
+            o = sgd(); o.weight_decay = bad; expect_invalid(o);
+            o = sgd(); o.momentum = bad; expect_invalid(o);
+            o = sgd(); o.beta1 = bad; expect_invalid(o);
+            o = sgd(); o.beta2 = bad; expect_invalid(o);
+            o = sgd(); o.epsilon = bad; expect_invalid(o);
+        }
+        auto o = sgd(); o.learning_rate = -1.0; expect_invalid(o);
+        o = sgd(); o.weight_decay = -0.5; expect_invalid(o);
+        o = sgd(); o.momentum = -0.5; expect_invalid(o);
+        o = sgd(); o.momentum = 1.0; expect_invalid(o);
+        o = sgd(); o.beta1 = -0.5; expect_invalid(o);
+        o = sgd(); o.beta1 = 1.0; expect_invalid(o);
+        o = sgd(); o.beta2 = -0.5; expect_invalid(o);
+        o = sgd(); o.beta2 = 1.0; expect_invalid(o);
+        o = sgd(); o.epsilon = 0.0; expect_invalid(o);
+        o = sgd(); o.epsilon = -1.0; expect_invalid(o);
+        // AdamW does not use SGD momentum.
+        o = sgd(); o.kind = NeuralOptimizerKind::AdamW; o.momentum = 0.5;
+        expect_invalid(o);
+        // BCEWithLogits requires an Identity output layer.
+        NeuralParameterSnapshot tanh_head(
+            NeuralNetwork(1, {{1, NeuralActivation::Tanh}}), {1.0, 0.0});
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            (void)NeuralTrainingSession(tanh_head, sgd(),
+                NeuralLossKind::BinaryCrossEntropyWithLogits));
+        // Non-empty batch whose sizes disagree.
+        NeuralTrainingSession trainer(affine(), sgd());
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            trainer.train_batch({{2.0}}, {}));
+        // BCE targets must lie in [0, 1].
+        NeuralTrainingSession bce(affine(), sgd(),
+            NeuralLossKind::BinaryCrossEntropyWithLogits);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            bce.train_batch({{1.0}}, {{1.5}}));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            bce.train_batch({{1.0}}, {{-0.5}}));
+    }
+
+    void test_checkpoint_restore_validation() {
+        NeuralNetwork net(1, {{1, NeuralActivation::Identity},
+                              {1, NeuralActivation::Identity}});
+        const auto snapshot = NeuralParameterSnapshot(net, {2.0, 1.0, 3.0, -1.0});
+        NeuralOptimizerOptions opt = sgd(0.05);
+        opt.momentum = 0.5;
+        opt.weight_decay = 0.1;
+        NeuralTrainingSession session(snapshot, opt,
+            NeuralLossKind::MeanSquaredError, {false, true});
+        (void)session.train_batch({{2.0}}, {{0.0}});
+        const std::size_t count = net.parameter_count();
+
+        // A valid checkpoint restores steps, moments and trainability.
+        auto restored = NeuralTrainingSession(session.export_checkpoint());
+        ARIADNE_TESTING_EXPECT_EQUAL(restored.steps(), session.steps());
+        ARIADNE_TESTING_PROVE(restored.export_checkpoint().first_moment ==
+                              session.export_checkpoint().first_moment);
+        ARIADNE_TESTING_PROVE(restored.export_checkpoint().second_moment ==
+                              session.export_checkpoint().second_moment);
+        ARIADNE_TESTING_PROVE(restored.trainable_layers() ==
+                              std::vector<bool>({false, true}));
+
+        const auto base = session.export_checkpoint();
+        auto expect_invalid = [this](NeuralTrainingCheckpoint const& c) {
+            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                (void)NeuralTrainingSession(c));
+        };
+        // Wrong optimizer-state dimensions.
+        {
+            auto c = base;
+            c.first_moment.resize(count - 1u);
+            expect_invalid(c);
+        }
+        {
+            auto c = base;
+            c.second_moment.resize(count + 1u);
+            expect_invalid(c);
+        }
+        // Non-finite moments.
+        {
+            auto c = base;
+            c.first_moment.at(0) = std::numeric_limits<double>::quiet_NaN();
+            expect_invalid(c);
+        }
+        {
+            auto c = base;
+            c.second_moment.at(1) = std::numeric_limits<double>::infinity();
+            expect_invalid(c);
+        }
+        // AdamW rejects a negative second moment.
+        {
+            NeuralOptimizerOptions a = sgd(0.05);
+            a.kind = NeuralOptimizerKind::AdamW;
+            NeuralTrainingSession adam(snapshot, a);
+            (void)adam.train_batch({{2.0}}, {{0.0}});
+            auto c = adam.export_checkpoint();
+            c.second_moment.at(2) = -1e-9;
+            expect_invalid(c);
+        }
+        // A frozen layer must keep exactly zero moments.
+        {
+            auto c = base;  // trainable_layers == {false, true}
+            c.first_moment.at(0) = 0.5;  // parameter 0 is in the frozen layer
+            expect_invalid(c);
+        }
+        {
+            auto c = base;
+            c.second_moment.at(0) = 0.5;
+            expect_invalid(c);
+        }
+        // SGD rejects any nonzero second moment.
+        {
+            auto c = base;
+            c.second_moment.at(2) = 0.5;
+            expect_invalid(c);
+        }
+        // steps == 0 requires exactly zero moments (checked with AdamW, whose
+        // second moments are legitimately positive).
+        {
+            NeuralOptimizerOptions a = sgd(0.05);
+            a.kind = NeuralOptimizerKind::AdamW;
+            NeuralTrainingSession adam(snapshot, a);
+            (void)adam.train_batch({{2.0}}, {{0.0}});
+            auto c = adam.export_checkpoint();
+            c.steps = 0;
+            expect_invalid(c);  // nonzero first moment
+            std::fill(c.first_moment.begin(), c.first_moment.end(), 0.0);
+            expect_invalid(c);  // nonzero second moment
+            std::fill(c.second_moment.begin(), c.second_moment.end(), 0.0);
+            NeuralTrainingSession fresh(std::move(c));
+            ARIADNE_TESTING_EXPECT_EQUAL(fresh.steps(), std::size_t{0});
+        }
+        // A saturated step counter cannot advance.
+        {
+            auto c = base;
+            std::fill(c.first_moment.begin(), c.first_moment.end(), 0.0);
+            std::fill(c.second_moment.begin(), c.second_moment.end(), 0.0);
+            c.steps = std::numeric_limits<std::size_t>::max();
+            NeuralTrainingSession saturated(std::move(c));
+            ARIADNE_TESTING_EXPECT_THROWS(std::overflow_error,
+                saturated.train_batch({{2.0}}, {{0.0}}));
+        }
     }
 
     void test_m5_layer_freeze_sgd_and_adamw() {
@@ -288,6 +447,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestTraining, test_minibatch_scaling_and_convergence);
     ARIADNE_TESTING_ADD_TEST(TestTraining, test_bce_logits_and_classification_convergence);
     ARIADNE_TESTING_ADD_TEST(TestTraining, test_deterministic_initialization_and_shuffling);
+    ARIADNE_TESTING_ADD_TEST(TestTraining, test_optimizer_loss_and_batch_validation);
+    ARIADNE_TESTING_ADD_TEST(TestTraining, test_checkpoint_restore_validation);
     ARIADNE_TESTING_ADD_TEST(TestTraining, test_m5_layer_freeze_sgd_and_adamw);
     ARIADNE_TESTING_ADD_TEST(TestTraining, test_m5_head_replacement_and_fine_tuning);
     ARIADNE_TESTING_ADD_TEST(TestTraining, test_m5_invalid_freeze_and_head);
