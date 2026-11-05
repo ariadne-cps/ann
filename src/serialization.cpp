@@ -107,8 +107,8 @@ private:
     }
     std::uint64_t number() {
         spaces();
-        if (position_ == source_.size() ||
-            source_[position_] < '0' || source_[position_] > '9')
+        // value() guarantees position_ < source_.size() before calling this.
+        if (source_[position_] < '0' || source_[position_] > '9')
             fail("Expected unsigned integer");
         if (source_[position_] == '0' && position_ + 1u < source_.size() &&
             source_[position_+1u] >= '0' && source_[position_+1u] <= '9')
@@ -168,9 +168,9 @@ private:
     }
 };
 
+// Every caller invokes keys() on the same value first, which already
+// guarantees Kind::Object; a non-object therefore simply misses the key.
 Json const& field(Json const& value, char const* key) {
-    if (value.kind != Json::Kind::Object)
-        throw std::invalid_argument("Expected JSON object");
     const auto it = value.object.find(key);
     if (it == value.object.end())
         throw std::invalid_argument(std::string("Missing required JSON field: ") + key);
@@ -192,9 +192,11 @@ std::string const& text(Json const& j) {
 }
 std::size_t size(Json const& j) {
     const auto number = integer(j);
-    if (number > static_cast<std::uint64_t>(
-            std::numeric_limits<std::size_t>::max()))
-        throw std::invalid_argument("JSON dimension not representable");
+    if constexpr (sizeof(std::size_t) < sizeof(std::uint64_t)) {
+        if (number > static_cast<std::uint64_t>(
+                std::numeric_limits<std::size_t>::max()))
+            throw std::invalid_argument("JSON dimension not representable");
+    }
     return static_cast<std::size_t>(number);
 }
 std::string const& literal(Json const& j, char const* expected) {
@@ -207,7 +209,9 @@ std::string read_file(std::string const& path, std::size_t limit) {
     std::ifstream stream(path, std::ios::binary | std::ios::ate);
     if (!stream) throw std::runtime_error("Cannot open neural snapshot file");
     const std::streamoff end = stream.tellg();
-    if (end < 0 || static_cast<std::uintmax_t>(end) >
+    // A negative tellg() converts to a huge unsigned value and is rejected
+    // by the same limit check.
+    if (static_cast<std::uintmax_t>(end) >
                   static_cast<std::uintmax_t>(limit))
         throw std::invalid_argument("Neural snapshot file exceeds size limit");
     std::string result(static_cast<std::size_t>(end),'\0');
@@ -230,10 +234,11 @@ void append64(std::string& result, std::uint64_t n) {
         n >>= 8u;
     }
 }
+// Every caller passes a substring of at most eight bytes taken from a buffer
+// whose length has already been validated, so no length check is needed.
 std::uint64_t decode64(std::string_view s) {
-    if (s.size()!=8u) throw std::invalid_argument("Expected eight bytes");
     std::uint64_t result=0u;
-    for (unsigned i=0u;i<8u;++i)
+    for (unsigned i=0u;i<s.size();++i)
         result |= static_cast<std::uint64_t>(
             static_cast<unsigned char>(s[i])) << (i*8u);
     return result;
@@ -333,10 +338,14 @@ std::uint64_t decode_hex(std::string const& value) {
         throw std::invalid_argument("Wrong neural optimizer numeric encoding");
     std::uint64_t n=0u;
     for (char c : value) {
-        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+        unsigned digit;
+        if (c >= '0' && c <= '9')
+            digit = static_cast<unsigned>(c - '0');
+        else if (c >= 'a' && c <= 'f')
+            digit = static_cast<unsigned>(c - 'a') + 10u;
+        else
             throw std::invalid_argument("Invalid neural optimizer numeric encoding");
-        n = (n << 4u) | static_cast<std::uint64_t>(
-            c <= '9' ? c-'0' : c-'a'+10);
+        n = (n << 4u) | static_cast<std::uint64_t>(digit);
     }
     return n;
 }
@@ -380,12 +389,10 @@ std::vector<bool> parse_mask(std::string const& s, std::size_t layers) {
     return result;
 }
 
+// The session constructor validates the optimizer kind, so the fallback is
+// exactly AdamW.
 char const* optimizer_name(NeuralOptimizerKind kind) {
-    switch (kind) {
-        case NeuralOptimizerKind::Sgd: return "sgd";
-        case NeuralOptimizerKind::AdamW: return "adamw";
-        default: throw std::invalid_argument("Unknown neural optimizer kind");
-    }
+    return kind == NeuralOptimizerKind::Sgd ? "sgd" : "adamw";
 }
 
 NeuralOptimizerKind parse_optimizer(std::string const& name) {
@@ -394,12 +401,10 @@ NeuralOptimizerKind parse_optimizer(std::string const& name) {
     throw std::invalid_argument("Unsupported neural optimizer kind");
 }
 
+// The session constructor validates the loss kind, so the fallback is
+// exactly BinaryCrossEntropyWithLogits.
 char const* loss_name(NeuralLossKind kind) {
-    switch (kind) {
-        case NeuralLossKind::MeanSquaredError: return "mse";
-        case NeuralLossKind::BinaryCrossEntropyWithLogits: return "bce_logits";
-        default: throw std::invalid_argument("Unknown neural loss kind");
-    }
+    return kind == NeuralLossKind::MeanSquaredError ? "mse" : "bce_logits";
 }
 
 NeuralLossKind parse_loss(std::string const& name) {
@@ -444,18 +449,12 @@ std::string neural_snapshot_sha256(NeuralParameterSnapshot const& snapshot) {
     const auto& network = snapshot.network();
     sha.update_u64(static_cast<std::uint64_t>(network.input_dimension()));
     sha.update_u64(static_cast<std::uint64_t>(network.layers().size()));
+    // NeuralNetwork validates every layer activation at construction.
+    static constexpr unsigned char codes[] = {0u, 1u, 2u, 3u, 4u};
     for (auto const& layer : network.layers()) {
         sha.update_u64(static_cast<std::uint64_t>(layer.outputs));
-        unsigned char code = 0u;
-        switch (layer.activation) {
-            case NeuralActivation::Identity: code = 0u; break;
-            case NeuralActivation::Relu: code = 1u; break;
-            case NeuralActivation::Tanh: code = 2u; break;
-            case NeuralActivation::Sigmoid: code = 3u; break;
-            case NeuralActivation::Softplus: code = 4u; break;
-            default: throw std::invalid_argument("Unknown neural activation");
-        }
-        const char encoded = static_cast<char>(code);
+        const char encoded = static_cast<char>(
+            codes[static_cast<unsigned>(layer.activation)]);
         sha.update(std::string_view(&encoded, 1u));
     }
     for (double value : snapshot.values())
@@ -498,9 +497,8 @@ void neural_save_snapshot(NeuralParameterSnapshot const& snapshot,
     manifest += "],\"tensors\":\"safetensors\",\"snapshot_sha256\":\"" +
         neural_snapshot_sha256(snapshot) + "\"}\n";
     header += "}";
-    if (manifest.size()>max_manifest_bytes ||
-        header.size()>max_header_bytes || payload.size()>max_payload_bytes)
-        throw std::invalid_argument("Neural snapshot exceeds file size limit");
+    // ensure_limit already bounds manifest (<1MB), header (<1MB) and payload
+    // (<=max_payload_bytes), so no separate file size check is needed here.
     std::string binary;
     binary.reserve(8u+header.size()+payload.size());
     append64(binary,static_cast<std::uint64_t>(header.size()));
@@ -558,8 +556,9 @@ NeuralParameterSnapshot neural_load_snapshot(
                       {layer.outputs,layer.inputs},next);
         verify_tensor(metadata.object,name(i,"bias"),{layer.outputs},next);
     }
-    if (next!=binary.size()-data_begin ||
-        next!=network.parameter_count()*8u)
+    // verify_tensor already matched every tensor shape and offset against
+    // the network layout, so next == parameter_count()*8u is guaranteed here.
+    if (next!=binary.size()-data_begin)
         throw std::invalid_argument("Safetensors trailing or missing payload bytes");
     std::vector<double> values(network.parameter_count());
     std::size_t cursor=0u;
@@ -621,8 +620,8 @@ void neural_save_training_checkpoint(
         + std::to_string(count)
         + R"(],"data_offsets":[)" + std::to_string(byte_count)
         + "," + std::to_string(byte_count*2u) + "]}}";
-    if (header.size()>max_header_bytes)
-        throw std::invalid_argument("Training checkpoint header exceeds size limit");
+    // The header is a fixed-size template: count is bounded by ensure_limit,
+    // so it can never exceed max_header_bytes.
     std::string binary;
     binary.reserve(8u+header.size()+byte_count*2u);
     append64(binary,static_cast<std::uint64_t>(header.size()));

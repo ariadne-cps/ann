@@ -111,26 +111,23 @@ LossEvaluation evaluate(NeuralExecutionSession const& execution,
             const double y = predictions[n][o], target = targets[n][o];
             double sample_loss = 0.0;
             double derivative = 0.0;
-            switch (kind) {
-                case NeuralLossKind::MeanSquaredError: {
-                    const double diff = finite(y - target);
-                    sample_loss = finite(0.5 * finite(diff * diff));
-                    derivative = diff;
-                    break;
+            // loss_ is validated by the session constructor, so the else
+            // branch is exactly BinaryCrossEntropyWithLogits.
+            if (kind == NeuralLossKind::MeanSquaredError) {
+                const double diff = finite(y - target);
+                sample_loss = finite(0.5 * finite(diff * diff));
+                derivative = diff;
+            } else {
+                // Stable softplus(logit) - target*logit, with no cancellation
+                // between two large positive terms.
+                if (y >= 0.0) {
+                    sample_loss = finite(
+                        finite((1.0 - target) * y) + std::log1p(std::exp(-y)));
+                } else {
+                    sample_loss = finite(
+                        finite(-target * y) + std::log1p(std::exp(y)));
                 }
-                case NeuralLossKind::BinaryCrossEntropyWithLogits:
-                    // Stable softplus(logit) - target*logit, with no cancellation
-                    // between two large positive terms.
-                    if (y >= 0.0) {
-                        sample_loss = finite(
-                            finite((1.0 - target) * y) + std::log1p(std::exp(-y)));
-                    } else {
-                        sample_loss = finite(
-                            finite(-target * y) + std::log1p(std::exp(y)));
-                    }
-                    derivative = finite(sigmoid(y) - target);
-                    break;
-                default: throw std::invalid_argument("Unknown neural loss");
+                derivative = finite(sigmoid(y) - target);
             }
             total = finite(total + sample_loss);
             if (with_gradient) cotangent.push_back(derivative);

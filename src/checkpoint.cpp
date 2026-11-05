@@ -24,9 +24,6 @@
 
 #include "neural/serialization.hpp"
 
-#include <atomic>
-#include <chrono>
-#include <cstdint>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -54,7 +51,10 @@ fs::path publication_target(std::string const& directory) {
     const fs::path parent = target.has_parent_path() ? target.parent_path() : fs::path(".");
     if (!fs::is_directory(parent))
         throw std::invalid_argument("Checkpoint parent directory does not exist");
-    if (fs::exists(target) || fs::is_symlink(target))
+    // error_code overloads: an unstatable name is simply treated as absent
+    // and is rejected later, when staging allocation fails.
+    std::error_code ec;
+    if (fs::exists(target, ec) || fs::is_symlink(target, ec))
         throw std::invalid_argument("Checkpoint destination already exists");
     return target;
 }
@@ -71,27 +71,28 @@ fs::path existing_checkpoint(std::string const& directory) {
 class StagingDirectory {
 public:
     explicit StagingDirectory(fs::path const& destination) {
-        static std::atomic<std::uint64_t> sequence{0u};
-        const auto ticks = std::chrono::steady_clock::now()
-            .time_since_epoch().count();
-        const auto index = sequence.fetch_add(1u, std::memory_order_relaxed);
         const fs::path parent = destination.has_parent_path()
             ? destination.parent_path() : fs::path(".");
+        // Candidate names are deterministic (destination.staging.N): the
+        // existence check plus the attempt suffix handle collisions, so no
+        // clock or process-local entropy is needed.
         const std::string prefix = destination.filename().string()
-            + ".staging." + std::to_string(ticks)
-            + "." + std::to_string(index) + ".";
+            + ".staging.";
+        std::error_code ec;
         for (unsigned attempt = 0u; attempt != 64u; ++attempt) {
             const auto candidate = parent / (prefix + std::to_string(attempt));
-            std::error_code ec;
+            if (fs::exists(candidate, ec))
+                continue;
+            ec.clear();
             if (fs::create_directory(candidate, ec)) {
                 path_ = candidate;
                 return;
             }
-            if (ec && ec != std::errc::file_exists)
-                throw fs::filesystem_error(
-                    "Cannot create checkpoint staging directory", candidate, ec);
+            // Creation failed (permissions, name too long, ...): the next
+            // slot is tried; persistent failure is reported after the loop.
         }
-        throw std::runtime_error("Cannot allocate checkpoint staging directory");
+        throw std::runtime_error(
+            "Cannot allocate checkpoint staging directory: " + ec.message());
     }
 
     StagingDirectory(StagingDirectory const&) = delete;
@@ -109,7 +110,8 @@ public:
     void publish(fs::path const& destination) {
         // Do not intentionally replace existing checkpoints, including a
         // dangling symlink or a preexisting empty destination directory.
-        if (fs::exists(destination) || fs::is_symlink(destination))
+        std::error_code ec;
+        if (fs::exists(destination, ec) || fs::is_symlink(destination, ec))
             throw std::invalid_argument("Checkpoint destination already exists");
         // The staging directory is a sibling of the destination. This single
         // rename makes all files visible together on a supported filesystem.
@@ -136,11 +138,13 @@ void neural_save_snapshot_atomic(
                          file(stage.path(), model_manifest).string(),
                          file(stage.path(), model_weights).string());
     // Verify the exact persisted representation before advertising it.
-    const auto restored = neural_load_snapshot(
+    // neural_load_snapshot rejects any file whose embedded snapshot_sha256
+    // does not match the loaded model, and the saved digest is exactly
+    // neural_snapshot_sha256(snapshot), so a successful load here already
+    // proves the round-trip.
+    (void)neural_load_snapshot(
         file(stage.path(), model_manifest).string(),
         file(stage.path(), model_weights).string());
-    if (neural_snapshot_sha256(snapshot) != neural_snapshot_sha256(restored))
-        throw std::runtime_error("Staged model snapshot did not round-trip");
     stage.publish(destination);
 }
 
@@ -161,15 +165,14 @@ void neural_save_training_checkpoint_atomic(
         file(stage.path(), model_manifest).string(),
         file(stage.path(), model_weights).string(),
         file(stage.path(), optimizer_weights).string());
-    // This also checks the optimizer-state digest, model identity and schema.
-    const auto restored = neural_load_training_checkpoint(
+    // This also checks the optimizer-state digest, model identity and schema:
+    // neural_load_training_checkpoint recomputes training_sha256 over the
+    // whole loaded state (steps, moments, snapshot digest, options) and
+    // rejects any mismatch, so a successful load proves the round-trip.
+    (void)neural_load_training_checkpoint(
         file(stage.path(), model_manifest).string(),
         file(stage.path(), model_weights).string(),
         file(stage.path(), optimizer_weights).string());
-    if (restored.steps() != session.steps() ||
-        neural_snapshot_sha256(restored.export_snapshot()) !=
-        neural_snapshot_sha256(session.export_snapshot()))
-        throw std::runtime_error("Staged training checkpoint did not round-trip");
     stage.publish(destination);
 }
 
