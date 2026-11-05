@@ -70,7 +70,7 @@ cmake --install build-release --prefix /path/to/install
 ```
 
 Python bindings require Python 3.11+ development headers and are composed into
-the `pyariadne` module. Set `-DBUILD_PYTHON_BINDINGS=OFF` to disable them.
+the `pyariadne_neural` module. Set `-DBUILD_PYTHON_BINDINGS=OFF` to disable them.
 
 ## Canonical model persistence (M5)
 
@@ -183,7 +183,3 @@ Arguments, `--help`, logging and `--concurrency` are handled by Ariadne's
 only `--concurrency 0` is accepted. A lightweight Debug CI smoke test
 checks the benchmark without imposing timing or convergence thresholds.
 For meaningful comparisons record compiler, build flags and hardware.
-
-## License
-
-GNU General Public License v3.0; see [LICENSE](LICENSE).

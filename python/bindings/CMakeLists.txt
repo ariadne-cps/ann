@@ -23,4 +23,4 @@ target_include_directories(pyariadne-neural INTERFACE
 )
 target_link_libraries(pyariadne-neural INTERFACE pyariadne-python-common)
 
-ariadne_add_python_module(NAME neural MODULE_SOURCE neural_module.cpp)
+ariadne_add_python_module(NAME neural MODULE_IMPORT_NAME pyariadne_neural MODULE_SOURCE neural_module.cpp)
