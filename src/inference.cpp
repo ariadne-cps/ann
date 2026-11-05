@@ -37,29 +37,32 @@ double sigmoid(double x) {
     return exp_x / (1.0 + exp_x);
 }
 
+// Activation dispatch is a table lookup: NeuralNetwork validates every layer
+// activation at construction, so no defensive default branch is needed here.
 double activate(NeuralActivation activation, double x) {
-    switch (activation) {
-        case NeuralActivation::Identity: return x;
-        case NeuralActivation::Relu: return x > 0.0 ? x : 0.0;
-        case NeuralActivation::Tanh: return std::tanh(x);
-        case NeuralActivation::Sigmoid: return sigmoid(x);
-        case NeuralActivation::Softplus:
-            if (x > 0.0) return x + std::log1p(std::exp(-x));
-            return std::log1p(std::exp(x));
-        default: throw std::invalid_argument("Unknown neural activation");
-    }
+    static constexpr double (*const table[])(double) = {
+        [](double v) { return v; },
+        [](double v) { return v > 0.0 ? v : 0.0; },
+        [](double v) { return std::tanh(v); },
+        [](double v) { return sigmoid(v); },
+        [](double v) {
+            return v > 0.0 ? v + std::log1p(std::exp(-v))
+                           : std::log1p(std::exp(v));
+        },
+    };
+    return table[static_cast<unsigned>(activation)](x);
 }
 
 double activation_derivative(NeuralActivation activation,
                              double preactivation, double activated) {
-    switch (activation) {
-        case NeuralActivation::Identity: return 1.0;
-        case NeuralActivation::Relu: return preactivation > 0.0 ? 1.0 : 0.0;
-        case NeuralActivation::Tanh: return 1.0 - activated * activated;
-        case NeuralActivation::Sigmoid: return activated * (1.0 - activated);
-        case NeuralActivation::Softplus: return sigmoid(preactivation);
-        default: throw std::invalid_argument("Unknown neural activation");
-    }
+    static constexpr double (*const table[])(double, double) = {
+        [](double, double) { return 1.0; },
+        [](double pre, double) { return pre > 0.0 ? 1.0 : 0.0; },
+        [](double, double act) { return 1.0 - act * act; },
+        [](double, double act) { return act * (1.0 - act); },
+        [](double pre, double) { return sigmoid(pre); },
+    };
+    return table[static_cast<unsigned>(activation)](preactivation, activated);
 }
 
 double finite_product(double lhs, double rhs) {
@@ -128,9 +131,9 @@ std::vector<double> forward(NeuralParameterSnapshot const& snapshot,
             for (std::size_t feature = 0; feature < layer.inputs; ++feature)
                 sum = finite_fma(parameters[offset + feature], current[feature], sum);
             if (trace) preactivation[output] = sum;
+            // sum is finite (finite bias plus finite_fma accumulation) and
+            // every activation maps finite inputs to finite outputs.
             next[output] = activate(layer.activation, sum);
-            if (!std::isfinite(next[output]))
-                throw std::overflow_error("Non-finite neural activation result");
         }
         if (trace) {
             trace->preactivations.push_back(std::move(preactivation));

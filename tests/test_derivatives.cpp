@@ -162,6 +162,12 @@ public:
             NeuralNetwork(1, {{1, NeuralActivation::Identity}}), {1e308, 0.0}));
         ARIADNE_TESTING_EXPECT_THROWS(std::overflow_error,
             large.differentiate({1.0}, {1e308}));
+        // Every forward value is finite, but delta * activation overflows:
+        // the weight gradient is 1e308 * 1e308.
+        NeuralExecutionSession huge(NeuralParameterSnapshot(
+            NeuralNetwork(1, {{1, NeuralActivation::Identity}}), {1.0, 0.0}));
+        ARIADNE_TESTING_EXPECT_THROWS(std::overflow_error,
+            huge.differentiate({1e308}, {1e308}));
     }
 };
 

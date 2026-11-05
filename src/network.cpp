@@ -39,8 +39,10 @@ std::size_t checked_add(std::size_t first, std::size_t second) {
     return first + second;
 }
 
+// The caller guarantees second != 0: every layer output count is validated
+// positive before this is called, and the input dimension is positive too.
 std::size_t checked_multiply(std::size_t first, std::size_t second) {
-    if (second != 0 && first > std::numeric_limits<std::size_t>::max() / second) {
+    if (first > std::numeric_limits<std::size_t>::max() / second) {
         throw std::overflow_error("Neural parameter count overflow");
     }
     return first * second;
