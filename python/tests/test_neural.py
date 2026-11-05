@@ -20,7 +20,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Ariadne Neural.  If not, see <https://www.gnu.org/licenses/>.
 
-from pyariadne import neural_version
+from pyariadne_neural import neural_version
 
 
 def test_neural_bootstrap():

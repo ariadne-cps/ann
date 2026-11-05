@@ -29,7 +29,7 @@ import struct
 
 import pytest
 
-from pyariadne import (
+from pyariadne_neural import (
     NeuralActivation,
     NeuralDenseLayerSpec,
     NeuralExecutionSession,

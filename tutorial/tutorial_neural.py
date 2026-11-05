@@ -25,7 +25,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from pyariadne import (
+from pyariadne_neural import (
     NeuralActivation,
     NeuralDenseLayerSpec,
     NeuralExecutionSession,
