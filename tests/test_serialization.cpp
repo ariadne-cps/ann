@@ -41,6 +41,10 @@
 #include <system_error>
 #include <thread>
 #include <vector>
+#if !defined(_WIN32)
+#include <csignal>
+#include <sys/resource.h>
+#endif
 
 using namespace Ariadne;
 
@@ -712,11 +716,22 @@ public:
             neural_save_snapshot(model(), "test_neural_m5_missing_dir/m.json",
                                  f.weights));
 #if !defined(_WIN32)
-        // /dev/full accepts the open but fails every write. Windows has no
-        // equivalent device, so this write-failure path is exercised on
-        // POSIX only.
-        ARIADNE_TESTING_EXPECT_THROWS(std::runtime_error,
-            neural_save_snapshot(model(), "/dev/full", f.weights));
+        // A file size limit makes the write fail after a successful open.
+        // POSIX only: Windows has no equivalent mechanism, so this
+        // write-failure branch is exercised on POSIX platforms.
+        {
+            struct rlimit original;
+            struct rlimit small;
+            (void)getrlimit(RLIMIT_FSIZE, &original);
+            small.rlim_cur = 64u;
+            small.rlim_max = original.rlim_max;
+            (void)setrlimit(RLIMIT_FSIZE, &small);
+            (void)std::signal(SIGXFSZ, SIG_IGN);
+            ARIADNE_TESTING_EXPECT_THROWS(std::runtime_error,
+                neural_save_snapshot(model(), f.json, f.weights));
+            (void)setrlimit(RLIMIT_FSIZE, &original);
+            (void)std::signal(SIGXFSZ, SIG_DFL);
+        }
 #endif
         // Snapshot path validation.
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,

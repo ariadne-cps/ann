@@ -136,19 +136,19 @@ private:
             result.kind = Json::Kind::Array;
             expect('[');
             if (!consume(']')) {
-                do {
+                for (;;) {
                     result.array.push_back(value(depth+1u));
                     if (result.array.size() > max_layers*4u)
                         fail("JSON array too large");
                     if (consume(']')) break;
                     expect(',');
-                } while (true);
+                }
             }
         } else if (source_[position_] == '{') {
             result.kind = Json::Kind::Object;
             expect('{');
             if (!consume('}')) {
-                do {
+                for (;;) {
                     const std::string key = string();
                     expect(':');
                     auto item = value(depth+1u);
@@ -158,7 +158,7 @@ private:
                         fail("JSON object too large");
                     if (consume('}')) break;
                     expect(',');
-                } while (true);
+                }
             }
         } else {
             result.kind = Json::Kind::Number;
