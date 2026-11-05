@@ -22,13 +22,14 @@ are not saved in model-only snapshots. An optional three-file training
 checkpoint preserves the optimizer state and trainability mask.
 C++ and Python interfaces expose model metadata, parameter snapshots, backend
 capability queries, CPU inference, derivatives and training.
+Although independently maintained and usable, this repository is also part of the [Ariadne repository structure](https://github.com/ariadne-cps/ariadne/blob/main/doc/structure.md).
 
 ## Dependencies
 
 Direct Git submodules, pinned to specific commits:
 
 - [Threading](https://github.com/ariadne-cps/threading) (`ss/thr`, for scheduling and Logging).
-- [Configuration](https://github.com/ariadne-cps/configuration) (`ss/cfg`, for CMake).
+- [Build](https://github.com/ariadne-cps/build) (`ss/bui`, for CMake).
 - [Testing](https://github.com/ariadne-cps/testing) (`ss/tst`, for tests).
 - [PythonCommon](https://github.com/ariadne-cps/python-common) (`ss/pyc`, for optional Python bindings and pybind11).
 
