@@ -64,7 +64,7 @@ jobs:
 
       - name: Build Release library and bindings
         if: matrix.build_type == 'Release'
-        run: cmake --build "${{ runner.workspace }}/build" --parallel "$NPROC" --target ariadne-neural bindings
+        run: cmake --build "${{ runner.workspace }}/build" --parallel "$NPROC" --target ariadne-ann bindings
 
       - name: Install Release library
         if: matrix.build_type == 'Release'
@@ -72,11 +72,11 @@ jobs:
 
       - name: Prepare C++ neural tutorial
         if: matrix.build_type == 'Release'
-        run: cmake -E copy_directory "$GITHUB_WORKSPACE/tutorial" "${{ runner.workspace }}/tutorial_neural"
+        run: cmake -E copy_directory "$GITHUB_WORKSPACE/tutorial" "${{ runner.workspace }}/tutorial_ann"
 
       - name: Build and check C++ neural tutorial
         if: matrix.build_type == 'Release'
-        working-directory: ${{ runner.workspace }}/tutorial_neural
+        working-directory: ${{ runner.workspace }}/tutorial_ann
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_PREFIX_PATH="${{ runner.workspace }}/install" \
@@ -86,7 +86,7 @@ jobs:
           cmake --build build --parallel "$NPROC"
           export LD_LIBRARY_PATH="${{ runner.workspace }}/install/lib:${LD_LIBRARY_PATH:-}"
           export DYLD_LIBRARY_PATH="${{ runner.workspace }}/install/lib:${DYLD_LIBRARY_PATH:-}"
-          ./build/tutorial_neural
+          ./build/tutorial_ann
 
       - name: Check installed Python neural tutorial
         if: matrix.build_type == 'Release'
@@ -96,8 +96,8 @@ jobs:
           LD_LIBRARY_PATH: ${{ runner.workspace }}/install/lib
           DYLD_LIBRARY_PATH: ${{ runner.workspace }}/install/lib
         run: |
-          python -c "import os, pathlib, pyariadne_neural; p=pathlib.Path(pyariadne_neural.__file__).resolve(); root=pathlib.Path(os.environ['PYTHONPATH']).resolve(); assert p.is_relative_to(root), (p, root)"
-          python tutorial_neural.py
+          python -c "import os, pathlib, pyariadne_ann; p=pathlib.Path(pyariadne_ann.__file__).resolve(); root=pathlib.Path(os.environ['PYTHONPATH']).resolve(); assert p.is_relative_to(root), (p, root)"
+          python tutorial_ann.py
 
       - name: Verify uninstallation
         if: matrix.build_type == 'Release'

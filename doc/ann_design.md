@@ -1,15 +1,15 @@
-# Neural: design objectives and initial architecture
+# ANN: design objectives and initial architecture
 
 ## Status and scope
 
-This document records the initial design decisions for the `ariadne-cps/neural`
+This document records the initial design decisions for the `ariadne-cps/ann`
 repository. It is a design journal and roadmap, **not** a claim that the
 features below have already been implemented. The initial repository bootstrap established build infrastructure and smoke
 bindings. M1 implements canonical network topology and frozen binary64 snapshots;
 M2 implements approximate native CPU inference, and M3 implements native CPU
 reverse-mode derivatives. Training, persistence, and validation remain planned.
 
-Ariadne Neural aims to provide an autonomous, portable, CPU-first C++20
+Ariadne ANN aims to provide an autonomous, portable, CPU-first C++20
 framework for neural-network inference and learning. Its distinctive goal is
 to preserve enough mathematical structure to support validated computation,
 structural guarantees, and rigorous analysis by the rest of Ariadne.
@@ -32,7 +32,7 @@ across all shared transitive paths.
   transfer learning, model serialization, and portable backend interfaces.
 - **Symbolic/Function own:** expression manipulation and mathematical
   function abstractions. Their ANN integration belongs in the future
-  `neuro-symbolic` repository, which depends on Neural and Symbolic;
+  `neural-set` repository, which depends on Neural and Symbolic;
   Neural must not depend on Function or Symbolic.
 - **Threading owns:** generic task scheduling, parallel loops, fixed-block
   reductions, cancellation and concurrency budgeting. Neural determines
@@ -156,7 +156,7 @@ present in the repository at this date**.
 
 | Backend | Approximate inference | Training/derivatives | Rigorous enclosures | Dependency |
 | --- | --- | --- | --- |
-| 2026-11-03 | Layout and README correction | Implemented; CI pending | Relocated the CPU inference public header to `include/neural/inference.hpp` and source to `src/inference.cpp` (no nested folders). Updated CMake and include directives. README now lists only actual capabilities and dependencies and adds the standard five workflow badges and Codecov badge. No inference behavior changed; test/build CI still required. | --- |
+| 2026-11-03 | Layout and README correction | Implemented; CI pending | Relocated the CPU inference public header to `include/ann/inference.hpp` and source to `src/inference.cpp` (no nested folders). Updated CMake and include directives. README now lists only actual capabilities and dependencies and adds the standard five workflow badges and Codecov badge. No inference behavior changed; test/build CI still required. | --- |
 | Native CPU | Yes, reference and optimized implementations | Manual backpropagation and native optimizers | No, unless executed through a validated evaluator | Existing Ariadne dependencies only |
 | Ariadne validated | Rigorous input/output evaluation | Validated input derivative enclosures; no default optimizer | Yes, with stated arithmetic/domain hypotheses | Existing Ariadne numerical stack |
 | LibTorch | Yes | PyTorch C++ autograd and optimizers, subject to capability checks | No | Optional LibTorch integration |
@@ -179,11 +179,11 @@ on LibTorch/MLX just to build a native-only consumer.
 
 ### M1 implemented contracts and explicit limitations
 
-The M1 C++ public API is in `include/neural/network.hpp` and
-`include/neural/backend.hpp`; implementations are confined to
+The M1 C++ public API is in `include/ann/network.hpp` and
+`include/ann/backend.hpp`; implementations are confined to
 `src/network.cpp` and `src/backend.cpp`. Declarations are documented with
 Doxygen, including exceptions, mathematical indexing and implementation
-limits. The existing `include/ariadne-neural.hpp` umbrella includes both.
+limits. The existing `include/ariadne-ann.hpp` umbrella includes both.
 
 - `NeuralNetwork(input_dimension, layers)` requires a positive input
   dimension and at least one dense layer, with a positive output dimension
@@ -226,7 +226,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DWARNINGS_AS_ERRORS=ON
 cmake --build build --parallel --target tests
 ctest --test-dir build --output-on-failure
 cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
-cmake --build build-release --parallel --target ariadne-neural bindings
+cmake --build build-release --parallel --target ariadne-ann bindings
 ```
 
 Test files added in M1: `tests/test_network.cpp`,
@@ -329,9 +329,9 @@ implemented features.
 
 ### Build and test separation
 
-The current layout keeps public headers directly in `include/neural/` and
+The current layout keeps public headers directly in `include/ann/` and
 implementation sources directly in `src/`, with no nested directories in either.
-The CPU inference header is `include/neural/inference.hpp`; its compiled
+The CPU inference header is `include/ann/inference.hpp`; its compiled
 implementation is `src/inference.cpp`.
 
 The core CMake targets and default CI must not require external runtime
@@ -553,7 +553,7 @@ storage orientation, and numerical comparison rules.
 within explicitly justified approximate tolerances; identity and
 single-layer affine cases agree with analytic results; consistent
 inference is exposed through C++ and Python and demonstrated in both
-`tutorial_neural.cpp` and `tutorial_neural.py`.
+`tutorial_ann.cpp` and `tutorial_ann.py`.
 
 **M2 implementation (2026-11-03):** Native CPU now implements synchronous
 `NeuralExecutionSession::infer(input)` and `infer_batch(inputs)`, mirrored in
@@ -844,7 +844,7 @@ The loader validates shapes and numeric finiteness before checking the
 digest. This is content integrity, not cryptographic authentication or
 certificate validation. A self-contained SHA-256 implementation follows
 FIPS 180-4 without adding a mandatory crypto library; its declaration lives
-in `include/neural/sha256.hpp` and implementation in `src/sha256.cpp`. The current-only
+in `include/ann/sha256.hpp` and implementation in `src/sha256.cpp`. The current-only
 schema intentionally removes the earlier `version` field; legacy
 manifests are rejected, not migrated. The file pair is still non-atomic.
 
@@ -954,7 +954,7 @@ published bytes after rejected writes, invalid parent directories and
 rejection of incomplete directories. Both tutorials demonstrate the
 new directory API.
 
-### M6 — Validated integration boundary (delegated to neuro-symbolic)
+### M6 — Validated integration boundary (delegated to neural-set)
 
 **Responsibility:** Neural must NOT gain a direct Numeric, Interval,
 Symbolic or Function dependency merely to support mathematical validation.
@@ -962,7 +962,7 @@ It owns frozen canonical binary64 snapshots, topology, activation semantics,
 and approximate CPU evaluation/derivatives. Validated interval-bound
 propagation, exact conversion of model parameters to directed-rounding
 arithmetic, and certified derivative enclosures belong in the future
-`ariadne-cps/neuro-symbolic` repository, which consumes Neural and Ariadne's
+`ariadne-cps/neural-set` repository, which consumes Neural and Ariadne's
 mathematical modules. This milestone remains a contract/design integration
 boundary within Neural, not an evaluator implementation.
 
@@ -996,11 +996,11 @@ contract stable and provide standalone C++/Python interoperability fixtures
 without importing downstream mathematical modules. All Function-compatible
 adapters, symbolic expansion, differentiation of expressions, interval
 evaluation, and reasoning-oriented composition belong in the future
-`ariadne-cps/neuro-symbolic` repository (and proof orchestration in
+`ariadne-cps/neural-set` repository (and proof orchestration in
 `reasoning`).
 
 **Acceptance:** Neural remains buildable independently of Function, Symbolic,
-Numeric and Reasoning. Downstream neuro-symbolic tests must establish
+Numeric and Reasoning. Downstream neural-set tests must establish
 conversion semantics, differentiability assumptions and enclosure
 correctness. The existing Barr3 fixture remains a future downstream
 integration/performance benchmark; an `UNKNOWN` result is not a certificate.
@@ -1029,9 +1029,9 @@ M0 baseline CI
   -> M3 derivatives
   -> M4 training
   -> M5 persistence / transfer
-  -> M6 validated integration boundary (in neuro-symbolic)
+  -> M6 validated integration boundary (in neural-set)
   -> M7 structural guarantees
-  -> M8 neuro-symbolic interoperability boundary
+  -> M8 neural-set interoperability boundary
   -> M9 optional optimization / backends
 ```
 
@@ -1045,7 +1045,7 @@ not change the committed dependency direction.
 ## Implementation documentation discipline
 
 **Mandatory for every implementation increment:** Modify
-`doc/neural_design.md` **in the same commit or pull request as the
+`doc/ann_design.md` **in the same commit or pull request as the
 implementation**, not in a later undocumented follow-up. Keep this
 document as the design journal and living contract. Each increment
 must add or update an entry in the implementation log below covering:
@@ -1064,21 +1064,21 @@ Update the existing design sections whenever an implemented choice
 supersedes a proposed one. Mark claims as **planned**, **implemented**,
 **tested**, or **formally established** as appropriate; test success and
 sample checks alone are not mathematical proof. C++ and Python source files
-must carry the standard Ariadne Neural copyright/GPL header; CMake files
+must carry the standard Ariadne ANN copyright/GPL header; CMake files
 must **not** carry this header.
 
 ### Implementation log
 
 | Date (UTC) | Milestone | Status | Changes, evidence, limitations |
 | --- | --- | --- | --- |
-| 2026-11-04 | Revert misallocated M6 validated evaluator | Corrected architecture; CI pending | Reverted commit f24f861 (Numeric-backed interval propagation, Numeric gitlink, CMake and Python/CPU backend changes and tests) because validated mathematics belongs downstream in future neuro-symbolic. Neural must retain independent frozen model/inference/training responsibilities and not depend on Numeric, Interval, Function or Symbolic. Reworded M6 and M8 roadmap as downstream integration boundaries. The reserved AriadneValidated backend remains explicitly unavailable; CI verification pending. |
+| 2026-11-04 | Revert misallocated M6 validated evaluator | Corrected architecture; CI pending | Reverted commit f24f861 (Numeric-backed interval propagation, Numeric gitlink, CMake and Python/CPU backend changes and tests) because validated mathematics belongs downstream in future neural-set. Neural must retain independent frozen model/inference/training responsibilities and not depend on Numeric, Interval, Function or Symbolic. Reworded M6 and M8 roadmap as downstream integration boundaries. The reserved AriadneValidated backend remains explicitly unavailable; CI verification pending. |
 | 2026-11-04 | M5 atomic directory publication | Implemented; CI pending | Added C++/Python model-only and training checkpoint directory APIs. Staging in a sibling directory uses existing JSON/Safetensors serialization and validates round trips before one rename makes a complete immutable checkpoint visible. Existing destinations are rejected; staging cleanup on failure; concurrency no-replace is not portable and power-loss durability is not guaranteed. Added cross-language tests and tutorials without changing file formats or introducing versioning. |
 | 2026-11-04 | M5 checkpoint header compilation fix and memory efficiency | Fixed; CI pending | Corrected malformed C++ JSON header string literals from the initial training checkpoint commit using C++ raw string literals; fixed both the syntax and ensured exact Safetensors metadata structure. Changed canonical training digest code to iterate over const pointers to moment vectors rather than copying potentially large arrays. Initial checkpoint commit failed sanitizer build; re-run all compilers and tests on the corrected code. |
 | 2026-11-04 | M5 resumable native CPU optimizer checkpoints | Implemented; full CI pending | Added NeuralTrainingCheckpoint and native session export/restore preserving SGD momentum or AdamW first/second moments, optimizer options, loss, layer trainability and update counter. Added separate optimizer Safetensors file with exact F64 moments, strict metadata and SHA-256 digest bound to the model snapshot; loader rejects mismatched files and tampering. Added C++/Python deterministic replay and corruption tests plus both tutorials, README and design documentation. No new dependencies; three-file persistence is non-atomic, not authenticated, and external data-stream RNG state is not captured. |
-| 2026-11-04 | Coverage CI: Codecov token check and report upload | Implemented; CI pending | Restored missing Codecov upload in Neural Coverage workflow, following Threading: macOS job checks `secrets.CODECOV_TOKEN` and fails explicitly when unavailable, then uploads `${{ runner.workspace }}/build/coverage.info` using codecov/codecov-action@v7.1.1 with disable_search, fail_ci_if_error and verbose enabled. Ubuntu/macOS continue generating coverage; only macOS uploads. Secret presence and external Codecov receipt cannot be verified from repository contents and require workflow execution; fork PRs without secrets will fail macOS by design. |\n| 2026-11-04 | M5 SHA-256 header/source separation | Implemented; CI pending | Split SHA-256 helper into declaration include/neural/sha256.hpp and implementation src/sha256.cpp, removed src/sha256.hpp, updated serialization include and NEURAL_SRC source list. Preserved the existing FIPS 180-4 hashing algorithm, canonical model digest and no external crypto dependencies. Added direct SHA-256 known-answer tests (empty, incremental abc, 1,000,000 a) to C++ serialization suite. Previous SHA snapshot commit had five green workflows; cross-platform CI of this refactor pending. |\n| 2026-11-04 | M5 canonical snapshot SHA-256 and current-only manifest | Implemented; CI pending | Removed manifest version field rather than introducing v1/v2 compatibility; required SHA-256 digest over canonical topology, activation tags and exact binary64 parameters. Added C++ and Python API neural_snapshot_sha256, FIPS SHA-256 implementation, same-shaped finite payload tamper detection, signed-zero identity checks and independent Python hashlib reference. Legacy manifests without digest intentionally rejected. Two-file publication remains non-atomic; no signature/authentication or optimizer-state checkpoint. |
+| 2026-11-04 | Coverage CI: Codecov token check and report upload | Implemented; CI pending | Restored missing Codecov upload in Neural Coverage workflow, following Threading: macOS job checks `secrets.CODECOV_TOKEN` and fails explicitly when unavailable, then uploads `${{ runner.workspace }}/build/coverage.info` using codecov/codecov-action@v7.1.1 with disable_search, fail_ci_if_error and verbose enabled. Ubuntu/macOS continue generating coverage; only macOS uploads. Secret presence and external Codecov receipt cannot be verified from repository contents and require workflow execution; fork PRs without secrets will fail macOS by design. |\n| 2026-11-04 | M5 SHA-256 header/source separation | Implemented; CI pending | Split SHA-256 helper into declaration include/ann/sha256.hpp and implementation src/sha256.cpp, removed src/sha256.hpp, updated serialization include and NEURAL_SRC source list. Preserved the existing FIPS 180-4 hashing algorithm, canonical model digest and no external crypto dependencies. Added direct SHA-256 known-answer tests (empty, incremental abc, 1,000,000 a) to C++ serialization suite. Previous SHA snapshot commit had five green workflows; cross-platform CI of this refactor pending. |\n| 2026-11-04 | M5 canonical snapshot SHA-256 and current-only manifest | Implemented; CI pending | Removed manifest version field rather than introducing v1/v2 compatibility; required SHA-256 digest over canonical topology, activation tags and exact binary64 parameters. Added C++ and Python API neural_snapshot_sha256, FIPS SHA-256 implementation, same-shaped finite payload tamper detection, signed-zero identity checks and independent Python hashlib reference. Legacy manifests without digest intentionally rejected. Two-file publication remains non-atomic; no signature/authentication or optimizer-state checkpoint. |
 | 2026-11-04 | M5 per-layer freezing, output head replacement and fine-tuning | Implemented; CI pending | Added optional per-layer trainable mask to native CPU training and explicit rejection of zero trainable layers or malformed masks; SGD momentum/decay and AdamW update only trainable parameters, preserving frozen binary64 values exactly. Added seeded output head replacement preserving all preceding layers bit-for-bit, independent optimizer state for fine-tuning, C++/Python tests and tutorials. No serialization of trainable masks, optimizer states, cryptographic identity or ONNX. |
 | 2026-11-04 | Fix JSON field error text after C-string key change | Implemented; CI pending | Corrected compile error in serialization parser: after changing field() key type to const char* for GCC 13 -Wdangling-reference, the missing-field exception attempted to add two C-string pointers. Explicitly construct std::string before concatenating the key. Previously published intermediate commit c0f6964 had build failures across compiler configurations; preserve this regression record and verify all workflow builds on the updated commit. |
-| 2026-11-04 | Remove Function dependency from Neural | Implemented; CI pending | Removed Function gitlink, submodule, direct and transitive dependency assertions; retained Threading for planned parallel training, CLI and Logging. Refactored Python bindings to depend on PythonCommon + pybind11 directly, adding PythonCommon as a pinned submodule instead of using pyariadne-function. Preserves combined pyariadne entry for standalone and parent repositories; C++20 neural model/inference/training/serialization logic unchanged. Future neuro-symbolic module consumes Neural and Symbolic (which depends on Function), not vice versa. Full CI and embedding integration pending. |
+| 2026-11-04 | Remove Function dependency from Neural | Implemented; CI pending | Removed Function gitlink, submodule, direct and transitive dependency assertions; retained Threading for planned parallel training, CLI and Logging. Refactored Python bindings to depend on PythonCommon + pybind11 directly, adding PythonCommon as a pinned submodule instead of using pyariadne-function. Preserves combined pyariadne entry for standalone and parent repositories; C++20 neural model/inference/training/serialization logic unchanged. Future neural-set module consumes Neural and Symbolic (which depends on Function), not vice versa. Full CI and embedding integration pending. |
 | 2026-11-04 | M5 GCC 13 dangling-reference diagnostic | Implemented; CI pending | Replaced temporary std::string argument in JSON field lookup with a literal C-string key, eliminating GCC 13 -Wdangling-reference false positive on references to shape/offsets/layers held in the parsed JSON object; their storage is owned by the Json tree and remains live. No suppression of -Werror or parser validation. Verified source patch; CI not yet completed. |
 | 2026-11-04 | M5 JSON plus Safetensors persistence | Implemented; CI pending | Introduced version-1 JSON topology manifest and standard Safetensors F64 layer tensors, exact binary64 bit patterns including signed zero, strict input bounds/schema/shape/offset checks, C++/Python save/load API and tests. Remains a two-file non-atomic checkpoint without a cryptographic identity; ONNX, freezing and transfer not yet implemented. No new mandatory dependency. |
 | 2026-11-04 | M4 benchmark GCC Debug lifetime fix | Fixed; CI pending | GCC 13 Debug -Werror=dangling-reference reported an iteration over `trainer.export_snapshot().values()` in benchmark checksum(). Since export_snapshot() returns a temporary and values() returns a reference, retain the snapshot as a named local for the full iteration. Semantics, timings and test coverage are unchanged; keep compiler warnings as errors. Ubuntu GCC Debug build, sanitizer/coverage failures and complete CI require verification on this commit. |
@@ -1105,8 +1105,8 @@ must **not** carry this header.
 
 Follow the modular Ariadne layout: flat `include/neural`, flat `src`, `tests`,
 `python/bindings`, `python/tests`, a single `tutorial/` directory holding
-both `tutorial_neural.cpp` and `tutorial_neural.py`, and `doc`; provide
-`include/ariadne-neural.hpp` as the umbrella header.
+both `tutorial_ann.cpp` and `tutorial_ann.py`, and `doc`; provide
+`include/ariadne-ann.hpp` as the umbrella header.
 
 Follow Function's standalone build conventions: CMake 3.15+, C++20,
 configuration bootstrap, test-only pinned Testing, installed bundled
@@ -1119,3 +1119,16 @@ validated numerical oracles for rigorous paths, and documentation of
 performance claims. Never weaken a semantic test just to satisfy CI or to
 increase coverage. Keep runtime-optional backends out of the mandatory CI
 matrix until a supported backend integration exists.
+
+
+## Repository rename (2026-11-06)
+
+The library repository is now `ariadne-cps/ann` (formerly `ariadne-cps/neural`).
+The module entry points are `ariadne-ann.hpp`, `ann/ann.hpp`, `ann_version()`,
+CMake `ann` / `ariadne-ann`, and Python `pyariadne_ann`.
+Neural-domain C++ class and function names remain intentionally unchanged.
+The downstream validated/function/set adapter is `ariadne-cps/neural-set`.
+The existing serialized manifest format identifier `ariadne-neural`,
+SHA-256 domain separators (including `ariadne-neural-model`) and training
+checkpoint identifiers are preserved byte-for-byte for compatibility.
+Historical entries above describe their original state at the time.

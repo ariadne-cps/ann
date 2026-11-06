@@ -1,29 +1,29 @@
 /***************************************************************************
- *            include/neural/sha256.hpp
+ *            include/ann/sha256.hpp
  *
  *  Copyright  2026  Luca Geretti
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne Neural.
+ *  This file is part of Ariadne ANN.
  *
- *  Ariadne Neural is free software: you can redistribute it and/or modify
+ *  Ariadne ANN is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne Neural is distributed in the hope that it will be useful,
+ *  Ariadne ANN is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne Neural.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne ANN.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef ARIADNE_NEURAL_SHA256_HPP
-#define ARIADNE_NEURAL_SHA256_HPP
+#ifndef ARIADNE_ANN_SHA256_HPP
+#define ARIADNE_ANN_SHA256_HPP
 
 #include <array>
 #include <cstddef>
@@ -53,4 +53,4 @@ private:
 
 } // namespace Ariadne::Detail
 
-#endif // ARIADNE_NEURAL_SHA256_HPP
+#endif // ARIADNE_ANN_SHA256_HPP

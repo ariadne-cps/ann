@@ -1,31 +1,31 @@
 # ***************************************************************************
-# *            tutorial/tutorial_neural.py
+# *            tutorial/tutorial_ann.py
 # *
 # *  Copyright  2026  Luca Geretti
 # *
 # ***************************************************************************
 #
-# This file is part of Ariadne Neural.
+# This file is part of Ariadne ANN.
 #
-# Ariadne Neural is free software: you can redistribute it and/or modify
+# Ariadne ANN is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Ariadne Neural is distributed in the hope that it will be useful,
+# Ariadne ANN is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Ariadne Neural.  If not, see <https://www.gnu.org/licenses/>.
+# along with Ariadne ANN.  If not, see <https://www.gnu.org/licenses/>.
 
 """Native CPU inference, training and canonical model persistence."""
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from pyariadne_neural import (
+from pyariadne_ann import (
     NeuralActivation,
     NeuralDenseLayerSpec,
     NeuralExecutionSession,
@@ -34,7 +34,7 @@ from pyariadne_neural import (
     NeuralNetwork,
     NeuralOperation,
     NeuralParameterSnapshot,
-    neural_version,
+    ann_version,
     neural_save_snapshot,
     neural_load_snapshot,
     neural_save_training_checkpoint,
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     ])
     snapshot = NeuralParameterSnapshot(model, [1, -1, -1, 1, 0, 0, 1, 1, 0])
     session = NeuralExecutionSession(snapshot)
-    print("Ariadne Neural", neural_version())
+    print("Ariadne ANN", ann_version())
     print("Network dimensions:", model.input_dimension(), "->", model.output_dimension())
     print("Parameters:", model.parameter_count())
     print("Native CPU snapshot import:", session.supports(NeuralOperation.ImportSnapshot))

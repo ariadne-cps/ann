@@ -6,23 +6,23 @@
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne Neural.
+ *  This file is part of Ariadne ANN.
  *
- *  Ariadne Neural is free software: you can redistribute it and/or modify
+ *  Ariadne ANN is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne Neural is distributed in the hope that it will be useful,
+ *  Ariadne ANN is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne Neural.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne ANN.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "ariadne-neural.hpp"
+#include "ariadne-ann.hpp"
 #include "threading/thread_manager.hpp"
 #include "threading/threading_command_line_interface.hpp"
 #include "logging/logging.hpp"
@@ -353,7 +353,7 @@ int main(int argc, char const* argv[]) {
             unsigned hits=0u;
         };
         Aggregate aggregates[count];
-        LOGGING_PRINTLN("Ariadne Neural | SGD, SGD+momentum, AdamW")
+        LOGGING_PRINTLN("Ariadne ANN | SGD, SGD+momentum, AdamW")
         LOGGING_PRINTLN("Network 8 -> " << options.hidden_width << " Tanh -> 1 Identity"
             << " | batch=" << options.batch_size << " | paired seeds=" << options.seeds
             << " | samples=" << options.samples << " + warm-up"

@@ -1,42 +1,42 @@
 /***************************************************************************
- *            python/bindings/neural_submodule.cpp
+ *            python/bindings/ann_submodule.cpp
  *
  *  Copyright  2026  Luca Geretti
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne Neural.
+ *  This file is part of Ariadne ANN.
  *
- *  Ariadne Neural is free software: you can redistribute it and/or modify
+ *  Ariadne ANN is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne Neural is distributed in the hope that it will be useful,
+ *  Ariadne ANN is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne Neural.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne ANN.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "pybind11.hpp"
 
-#include "neural/neural.hpp"
-#include "neural/network.hpp"
-#include "neural/backend.hpp"
-#include "neural/training.hpp"
-#include "neural/serialization.hpp"
+#include "ann/ann.hpp"
+#include "ann/network.hpp"
+#include "ann/backend.hpp"
+#include "ann/training.hpp"
+#include "ann/serialization.hpp"
 
 #include <cstddef>
 #include <vector>
 
 using namespace Ariadne;
 
-void neural_submodule(pybind11::module& module) {
-    module.def("neural_version", &neural_version);
+void ann_submodule(pybind11::module& module) {
+    module.def("ann_version", &ann_version);
 
     pybind11::enum_<NeuralActivation>(module, "NeuralActivation")
         .value("Identity", NeuralActivation::Identity)

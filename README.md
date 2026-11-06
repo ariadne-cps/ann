@@ -1,13 +1,13 @@
-# Ariadne Neural
+# Ariadne ANN
 
-[![macOS Status](https://github.com/ariadne-cps/neural/actions/workflows/macos.yml/badge.svg)](https://github.com/ariadne-cps/neural/actions/workflows/macos.yml)
-[![Ubuntu Status](https://github.com/ariadne-cps/neural/actions/workflows/ubuntu.yml/badge.svg)](https://github.com/ariadne-cps/neural/actions/workflows/ubuntu.yml)
-[![Windows Status](https://github.com/ariadne-cps/neural/actions/workflows/win.yml/badge.svg)](https://github.com/ariadne-cps/neural/actions/workflows/win.yml)
-[![Sanitizers Status](https://github.com/ariadne-cps/neural/actions/workflows/sanitizers.yml/badge.svg)](https://github.com/ariadne-cps/neural/actions/workflows/sanitizers.yml)
-[![Coverage Status](https://github.com/ariadne-cps/neural/actions/workflows/coverage.yml/badge.svg)](https://github.com/ariadne-cps/neural/actions/workflows/coverage.yml)
-[![codecov](https://codecov.io/gh/ariadne-cps/neural/branch/main/graph/badge.svg)](https://codecov.io/gh/ariadne-cps/neural)
+[![macOS Status](https://github.com/ariadne-cps/ann/actions/workflows/macos.yml/badge.svg)](https://github.com/ariadne-cps/ann/actions/workflows/macos.yml)
+[![Ubuntu Status](https://github.com/ariadne-cps/ann/actions/workflows/ubuntu.yml/badge.svg)](https://github.com/ariadne-cps/ann/actions/workflows/ubuntu.yml)
+[![Windows Status](https://github.com/ariadne-cps/ann/actions/workflows/win.yml/badge.svg)](https://github.com/ariadne-cps/ann/actions/workflows/win.yml)
+[![Sanitizers Status](https://github.com/ariadne-cps/ann/actions/workflows/sanitizers.yml/badge.svg)](https://github.com/ariadne-cps/ann/actions/workflows/sanitizers.yml)
+[![Coverage Status](https://github.com/ariadne-cps/ann/actions/workflows/coverage.yml/badge.svg)](https://github.com/ariadne-cps/ann/actions/workflows/coverage.yml)
+[![codecov](https://codecov.io/gh/ariadne-cps/ann/branch/main/graph/badge.svg)](https://codecov.io/gh/ariadne-cps/ann)
 
-Ariadne Neural is a standalone C++20 library for dense feed-forward neural networks.
+Ariadne ANN is a standalone C++20 library for dense feed-forward neural networks.
 Its current implementation provides canonical network topology, frozen binary64
 parameter snapshots and native-CPU inference for individual samples and batches,
 reverse-mode input/parameter derivatives, input Jacobians, and per-batch gradient
@@ -33,27 +33,27 @@ Direct Git submodules, pinned to specific commits:
 - [Testing](https://github.com/ariadne-cps/testing) (`ss/tst`, for tests).
 - [PythonCommon](https://github.com/ariadne-cps/python-common) (`ss/pyc`, for optional Python bindings and pybind11).
 
-The C++ neural model, inference, Jacobian, training and serialization code
+The ANN C++ model, inference, Jacobian, training and serialization code
 does not depend on Function or Symbolic. Function-based and symbolic adapters
-belong in the planned `neuro-symbolic` repository. Threading remains a direct
+belong in the planned `neural-set` repository. Threading remains a direct
 dependency for the planned parallel CPU implementation and the Ariadne
 command-line/logger benchmark.
 
 ## Layout
 
-- `include/neural/`: public headers, including `inference.hpp`.
-- `include/ariadne-neural.hpp`: umbrella header.
+- `include/ann/`: public headers, including `inference.hpp`.
+- `include/ariadne-ann.hpp`: umbrella header.
 - `src/`: implementation sources, including `inference.cpp`.
 - `tests/`: C++ tests.
 - `python/bindings/` and `python/tests/`: Python bindings and tests.
 - `tutorial/`: C++ and Python examples.
-- `doc/neural_design.md`: design journal and roadmap.
+- `doc/ann_design.md`: design journal and roadmap.
 
 ## Build and test
 
 ```sh
-git clone https://github.com/ariadne-cps/neural.git
-cd neural
+git clone https://github.com/ariadne-cps/ann.git
+cd ann
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --parallel --target tests
 ctest --test-dir build --output-on-failure
@@ -65,16 +65,16 @@ To build and install the release library and Python bindings:
 
 ```sh
 cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
-cmake --build build-release --parallel --target ariadne-neural bindings
+cmake --build build-release --parallel --target ariadne-ann bindings
 cmake --install build-release --prefix /path/to/install
 ```
 
 Python bindings require Python 3.11+ development headers and are composed into
-the `pyariadne_neural` module. Set `-DBUILD_PYTHON_BINDINGS=OFF` to disable them.
+the `pyariadne_ann` module. Set `-DBUILD_PYTHON_BINDINGS=OFF` to disable them.
 
 ## Canonical model persistence (M5)
 
-Ariadne Neural saves a frozen network in two open files: a versioned JSON
+Ariadne ANN saves a frozen network in two open files: a versioned JSON
 manifest describing the dense topology and activations, and a standard
 Safetensors file containing named, row-major F64 weights and biases.
 The binary64 parameter bits (including signed zero) are preserved exactly.
@@ -87,7 +87,7 @@ restored = neural_load_snapshot("model.json", "model.safetensors")
 ```
 
 The current-only schema and strict size/type validation rules are recorded
-in [the design journal](doc/neural_design.md). File pairs must be published together. Each manifest contains a canonical
+in [the design journal](doc/ann_design.md). File pairs must be published together. Each manifest contains a canonical
 SHA-256 snapshot digest (exposed as `neural_snapshot_sha256`) binding topology,
 activations and exact binary64 parameter bits. The digest is a content
 identifier, not an authenticated signature. There is no legacy manifest

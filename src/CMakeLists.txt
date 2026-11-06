@@ -1,5 +1,5 @@
-add_library(NEURAL_SRC OBJECT
-    neural.cpp
+add_library(ANN_SRC OBJECT
+    ann.cpp
     network.cpp
     backend.cpp
     inference.cpp
@@ -8,6 +8,6 @@ add_library(NEURAL_SRC OBJECT
     checkpoint.cpp
     sha256.cpp
 )
-target_include_directories(NEURAL_SRC PRIVATE
-    "${PROJECT_SOURCE_DIR}/include/neural"
+target_include_directories(ANN_SRC PRIVATE
+    "${PROJECT_SOURCE_DIR}/include/ann"
 )

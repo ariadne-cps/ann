@@ -1,28 +1,28 @@
 /***************************************************************************
- *            tutorial/tutorial_neural.cpp
+ *            tutorial/tutorial_ann.cpp
  *
  *  Copyright  2026  Luca Geretti
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne Neural.
+ *  This file is part of Ariadne ANN.
  *
- *  Ariadne Neural is free software: you can redistribute it and/or modify
+ *  Ariadne ANN is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne Neural is distributed in the hope that it will be useful,
+ *  Ariadne ANN is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne Neural.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne ANN.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "ariadne-neural.hpp"
+#include "ariadne-ann.hpp"
 
 #include <iostream>
 #include <cstdio>
@@ -38,7 +38,7 @@ int main() {
         network, {1.0, -1.0, -1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0});
     NeuralExecutionSession session(parameters);
 
-    std::cout << "Ariadne Neural " << neural_version() << '\n'
+    std::cout << "Ariadne ANN " << ann_version() << '\n'
               << "Network dimensions: " << network.input_dimension()
               << " -> " << network.output_dimension() << '\n'
               << "Parameters: " << network.parameter_count() << '\n'

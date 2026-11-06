@@ -1,42 +1,42 @@
 /***************************************************************************
- *            neural/backend.hpp
+ *            ann/backend.hpp
  *
  *  Copyright  2026  Luca Geretti
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne Neural.
+ *  This file is part of Ariadne ANN.
  *
- *  Ariadne Neural is free software: you can redistribute it and/or modify
+ *  Ariadne ANN is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne Neural is distributed in the hope that it will be useful,
+ *  Ariadne ANN is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne Neural.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne ANN.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file neural/backend.hpp
+/** @file ann/backend.hpp
  *  @brief Backend capability contract and frozen model import session.
  *
  *  The backend contract is intentionally independent of any tensor runtime.
  *  A backend advertises only operations that have actually been implemented.
  */
-#ifndef ARIADNE_NEURAL_BACKEND_HPP
-#define ARIADNE_NEURAL_BACKEND_HPP
+#ifndef ARIADNE_ANN_BACKEND_HPP
+#define ARIADNE_ANN_BACKEND_HPP
 
-#include "neural/network.hpp"
-#include "neural/derivatives.hpp"
+#include "ann/network.hpp"
+#include "ann/derivatives.hpp"
 
 namespace Ariadne {
 
-/** @brief Execution implementations planned for Ariadne Neural.
+/** @brief Execution implementations planned for Ariadne ANN.
  *
  *  Enumeration of a backend does not imply that it is built or available.
  *  LibTorch and MLX must remain optional integrations.
@@ -160,4 +160,4 @@ private:
 
 } // namespace Ariadne
 
-#endif // ARIADNE_NEURAL_BACKEND_HPP
+#endif // ARIADNE_ANN_BACKEND_HPP

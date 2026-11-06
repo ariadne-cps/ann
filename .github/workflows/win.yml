@@ -70,7 +70,7 @@ jobs:
 
       - name: Build Release library and bindings
         if: matrix.build_type == 'Release'
-        run: cmake --build build --parallel --target ariadne-neural bindings
+        run: cmake --build build --parallel --target ariadne-ann bindings
 
       - name: Install Release library
         if: matrix.build_type == 'Release'
@@ -79,17 +79,17 @@ jobs:
       - name: Prepare C++ neural tutorial
         if: matrix.build_type == 'Release'
         shell: pwsh
-        run: cmake -E copy_directory "$env:GITHUB_WORKSPACE/tutorial" "${{ runner.workspace }}/tutorial_neural"
+        run: cmake -E copy_directory "$env:GITHUB_WORKSPACE/tutorial" "${{ runner.workspace }}/tutorial_ann"
 
       - name: Build and check C++ neural tutorial
         if: matrix.build_type == 'Release'
         shell: pwsh
-        working-directory: ${{ runner.workspace }}/tutorial_neural
+        working-directory: ${{ runner.workspace }}/tutorial_ann
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ runner.workspace }}/install" -DCMAKE_C_COMPILER_LAUNCHER="$env:SCCACHE_LAUNCHER" -DCMAKE_CXX_COMPILER_LAUNCHER="$env:SCCACHE_LAUNCHER"
           cmake --build build --parallel
           $env:PATH = "${{ runner.workspace }}\install\bin;$env:PATH"
-          & ".\build\tutorial_neural.exe"
+          & ".\build\tutorial_ann.exe"
 
       - name: Check installed Python neural tutorial
         if: matrix.build_type == 'Release'
@@ -98,9 +98,9 @@ jobs:
         run: |
           $env:PYTHONPATH = "${{ runner.workspace }}\install\Lib\site-packages"
           $env:PATH = "${{ runner.workspace }}\install\bin;$env:PATH"
-          python -c "import os, pathlib, pyariadne_neural; p=pathlib.Path(pyariadne_neural.__file__).resolve(); root=pathlib.Path(os.environ['PYTHONPATH']).resolve(); assert p.is_relative_to(root), (p, root)"
+          python -c "import os, pathlib, pyariadne_ann; p=pathlib.Path(pyariadne_ann.__file__).resolve(); root=pathlib.Path(os.environ['PYTHONPATH']).resolve(); assert p.is_relative_to(root), (p, root)"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tutorial_neural.py
+          python tutorial_ann.py
 
       - name: Verify uninstallation
         if: matrix.build_type == 'Release'

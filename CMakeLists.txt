@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(Neural VERSION 0.1.0)
+project(ANN VERSION 0.1.0)
 
 option(WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(BUILD_PYTHON_BINDINGS "Build Python bindings" ON)
@@ -18,7 +18,7 @@ endif()
 
 if(EXISTS "${PROJECT_SOURCE_DIR}/.git")
     # Each direct submodule verifies its own internal diamonds. Check only
-    # the shared dependencies newly brought together by Neural.
+    # the shared dependencies newly brought together by ANN.
     require_same_dependency_commit(Build CHAINS
         "build"
         "threading|build"
@@ -36,30 +36,30 @@ include_directories("${PROJECT_SOURCE_DIR}/include")
 
 add_subdirectory(ss)
 
-add_library(neural INTERFACE)
-target_include_directories(neural INTERFACE
+add_library(ann INTERFACE)
+target_include_directories(ann INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include/ariadne-neural>
+    $<INSTALL_INTERFACE:include/ariadne-ann>
 )
-target_link_libraries(neural INTERFACE threading)
+target_link_libraries(ann INTERFACE threading)
 
 add_subdirectory(src)
-target_link_libraries(NEURAL_SRC PRIVATE neural)
+target_link_libraries(ANN_SRC PRIVATE ann)
 
 ariadne_register_public_headers(
-    TARGET neural
-    DIRECTORIES "${PROJECT_SOURCE_DIR}/include/neural"
-    FILES "${PROJECT_SOURCE_DIR}/include/ariadne-neural.hpp"
+    TARGET ann
+    DIRECTORIES "${PROJECT_SOURCE_DIR}/include/ann"
+    FILES "${PROJECT_SOURCE_DIR}/include/ariadne-ann.hpp"
 )
 
 setup_project_library(
-    TARGET ariadne-neural
-    OBJECTS NEURAL_SRC
-    LINK_LIBRARIES neural
+    TARGET ariadne-ann
+    OBJECTS ANN_SRC
+    LINK_LIBRARIES ann
 )
 
 setup_standalone_project_tests(
-    TARGET ariadne-neural
+    TARGET ariadne-ann
     TEST_DIRECTORY tests
     TEST_TARGET tests
     SOURCES
@@ -80,7 +80,7 @@ endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     ariadne_install_dependency_bundle(
-        TARGET neural
-        DESTINATION include/ariadne-neural
+        TARGET ann
+        DESTINATION include/ariadne-ann
     )
 endif()

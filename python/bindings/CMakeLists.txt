@@ -2,25 +2,25 @@ include_directories(${Python3_INCLUDE_DIRS})
 
 get_target_property(PYTHON_COMMON_SOURCE_DIR pyariadne-python-common SOURCE_DIR)
 
-add_library(pyariadne-neural-submodule-obj OBJECT neural_submodule.cpp)
-target_include_directories(pyariadne-neural-submodule-obj PRIVATE
+add_library(pyariadne-ann-submodule-obj OBJECT ann_submodule.cpp)
+target_include_directories(pyariadne-ann-submodule-obj PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${PYTHON_COMMON_SOURCE_DIR}/include"
 )
-target_link_libraries(pyariadne-neural-submodule-obj PRIVATE
+target_link_libraries(pyariadne-ann-submodule-obj PRIVATE
     pyariadne-python-common
     pybind11::module
-    neural
+    ann
 )
-set_target_properties(pyariadne-neural-submodule-obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(pyariadne-ann-submodule-obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_library(pyariadne-neural INTERFACE)
-target_sources(pyariadne-neural INTERFACE
-    $<TARGET_OBJECTS:pyariadne-neural-submodule-obj>
+add_library(pyariadne-ann INTERFACE)
+target_sources(pyariadne-ann INTERFACE
+    $<TARGET_OBJECTS:pyariadne-ann-submodule-obj>
 )
-target_include_directories(pyariadne-neural INTERFACE
+target_include_directories(pyariadne-ann INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
-target_link_libraries(pyariadne-neural INTERFACE pyariadne-python-common)
+target_link_libraries(pyariadne-ann INTERFACE pyariadne-python-common)
 
-ariadne_add_python_module(NAME neural MODULE_IMPORT_NAME pyariadne_neural MODULE_SOURCE neural_module.cpp)
+ariadne_add_python_module(NAME ann MODULE_IMPORT_NAME pyariadne_ann MODULE_SOURCE ann_module.cpp)

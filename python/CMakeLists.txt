@@ -10,7 +10,7 @@ if(Python3_FOUND)
     report_python_configuration_once()
 
     if(NOT TARGET pyariadne-python-common)
-        message(FATAL_ERROR "The PythonCommon target is required to build Neural bindings.")
+        message(FATAL_ERROR "The PythonCommon target is required to build ANN bindings.")
     endif()
     if(NOT TARGET pybind11::module)
         get_target_property(PYTHON_COMMON_SOURCE_DIR pyariadne-python-common SOURCE_DIR)
@@ -23,7 +23,7 @@ if(Python3_FOUND)
     add_subdirectory(bindings)
 
     if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
-        ariadne_finalize_python_module(NAME neural MODULE_IMPORT_NAME pyariadne_neural)
+        ariadne_finalize_python_module(NAME ann MODULE_IMPORT_NAME pyariadne_ann)
 
         if(WIN32)
             set(_python_install_dir "Lib/site-packages")

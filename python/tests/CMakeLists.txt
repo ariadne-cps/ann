@@ -12,23 +12,23 @@ else()
     if(PYTHON_ENFORCE_TESTS)
         message(FATAL_ERROR "pytest is unavailable for ${Python3_EXECUTABLE}.")
     else()
-        message(WARNING "pytest is unavailable; Neural Python tests will be skipped.")
+        message(WARNING "pytest is unavailable; ANN Python tests will be skipped.")
     endif()
 endif()
 
 if(PYTHON_TESTS)
-    add_custom_target(test_python_neural
+    add_custom_target(test_python_ann
         COMMAND "${Python3_EXECUTABLE}" -m pytest "${CMAKE_CURRENT_SOURCE_DIR}"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     )
-    add_test(NAME test_python_neural
+    add_test(NAME test_python_ann
         COMMAND "${Python3_EXECUTABLE}" -m pytest "${CMAKE_CURRENT_SOURCE_DIR}"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     )
-    set_property(TEST test_python_neural PROPERTY
+    set_property(TEST test_python_ann PROPERTY
         ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:pyariadne>"
     )
-    set_property(TEST test_python_neural PROPERTY LABELS "python")
-    add_dependencies(test_python_neural pyariadne)
+    set_property(TEST test_python_ann PROPERTY LABELS "python")
+    add_dependencies(test_python_ann pyariadne)
     add_dependencies(tests pyariadne)
 endif()
