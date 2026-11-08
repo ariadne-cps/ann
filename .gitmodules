@@ -10,3 +10,6 @@
 [submodule "pyc"]
 	path = ss/pyc
 	url = https://github.com/ariadne-cps/python-common
+[submodule "bmk"]
+	path = ss/bmk
+	url = https://github.com/ariadne-cps/benchmarking

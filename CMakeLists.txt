@@ -20,9 +20,9 @@ if(NOT TARGET ariadne-build)
 endif()
 
 if(EXISTS "${PROJECT_SOURCE_DIR}/.git")
-    # Pinned child commits guarantee their internal consistency.
+    # Check production commits only. Testing and Benchmarking are independent development dependencies.
     require_same_dependency_commit(Build CHAINS
-        "build" "threading|build" "testing|build")
+        "build" "threading|build")
 endif()
 
 setup_project()
@@ -53,7 +53,7 @@ setup_project_library(
     LINK_LIBRARIES ann
 )
 
-setup_standalone_project_tests(
+setup_standalone_project(
     TARGET ariadne-ann
     TEST_DIRECTORY tests
     TEST_TARGET tests
@@ -62,12 +62,7 @@ setup_standalone_project_tests(
         "${PROJECT_SOURCE_DIR}/src"
 )
 
-# The testing orchestrator may auto-register an existing benchmarks directory.
-# Register it explicitly only when its executable is not already present.
-if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR
-   AND NOT TARGET benchmark_optimizers)
-    add_subdirectory(benchmarks)
-endif()
+# setup_standalone_project registers the benchmark directory when available.
 
 if(BUILD_PYTHON_BINDINGS)
     add_subdirectory(python)

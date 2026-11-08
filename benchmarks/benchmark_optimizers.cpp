@@ -24,15 +24,13 @@
 
 #include "ariadne-ann.hpp"
 #include "threading/thread_manager.hpp"
-#include "threading/threading_command_line_interface.hpp"
-#include "logging/logging.hpp"
+#include "ariadne-benchmarking.hpp"
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <iomanip>
+#include <memory>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -41,6 +39,7 @@
 
 namespace {
 using namespace Ariadne;
+namespace Bench=Ariadne::Benchmarking;
 
 struct Options {
     unsigned iterations = 50u;
@@ -57,18 +56,6 @@ struct Options {
     double weight_decay = 0.0;
 };
 
-template<class UInt>
-UInt parse_unsigned(String const& value) {
-    const std::string text(value);
-    if (text.empty() || text.front() == '-')
-        throw std::invalid_argument("expected an unsigned integer");
-    std::size_t used = 0u;
-    const unsigned long long number = std::stoull(text, &used);
-    if (used != text.size() || number > std::numeric_limits<UInt>::max())
-        throw std::invalid_argument("unsigned integer out of range");
-    return static_cast<UInt>(number);
-}
-
 double parse_finite(String const& value, bool strictly_positive) {
     const std::string text(value);
     std::size_t used = 0u;
@@ -84,14 +71,14 @@ List<ArgumentParser> parsers(Options& selection) {
     result.append(make_valued_argument_parser(
         "i", "iterations", "Training steps per timing sample (1..100000)",
         [&selection](String const& value) -> VoidFunction {
-            const unsigned n = parse_unsigned<unsigned>(value);
+            const unsigned n = Bench::parse_unsigned<unsigned>(value);
             if (n == 0u || n > 100000u) throw std::invalid_argument("iterations out of range");
             return [&selection,n] { selection.iterations = n; };
         }));
     result.append(make_valued_argument_parser(
-        "n", "samples", "Odd number of measured samples (3..51), plus warm-up",
+        "n", "samples", "Odd measured samples (3..51); configure warm-ups with --warmups",
         [&selection](String const& value) -> VoidFunction {
-            const unsigned n = parse_unsigned<unsigned>(value);
+            const unsigned n = Bench::parse_unsigned<unsigned>(value);
             if (n < 3u || n > 51u || (n & 1u) == 0u)
                 throw std::invalid_argument("samples must be odd, 3..51");
             return [&selection,n] { selection.samples = n; };
@@ -99,21 +86,21 @@ List<ArgumentParser> parsers(Options& selection) {
     result.append(make_valued_argument_parser(
         "b", "batch-size", "Examples per identical training mini-batch (1..1024)",
         [&selection](String const& value) -> VoidFunction {
-            const unsigned n = parse_unsigned<unsigned>(value);
+            const unsigned n = Bench::parse_unsigned<unsigned>(value);
             if (n == 0u || n > 1024u) throw std::invalid_argument("batch size out of range");
             return [&selection,n] { selection.batch_size = n; };
         }));
     result.append(make_valued_argument_parser(
         "w", "width", "Number of Tanh hidden units (1..1024)",
         [&selection](String const& value) -> VoidFunction {
-            const unsigned n = parse_unsigned<unsigned>(value);
+            const unsigned n = Bench::parse_unsigned<unsigned>(value);
             if (n == 0u || n > 1024u) throw std::invalid_argument("hidden width out of range");
             return [&selection,n] { selection.hidden_width = n; };
         }));
     result.append(make_valued_argument_parser(
         "", "seed", "Seed for the shared initial network and data (default: 42)",
         [&selection](String const& value) -> VoidFunction {
-            const auto seed = parse_unsigned<std::uint64_t>(value);
+            const auto seed = Bench::parse_unsigned<std::uint64_t>(value);
             return [&selection,seed] { selection.seed = seed; };
         }));
     result.append(make_valued_argument_parser(
@@ -145,14 +132,14 @@ List<ArgumentParser> parsers(Options& selection) {
     result.append(make_valued_argument_parser(
         "", "seeds", "Number of paired seed workloads (1..16; default 3)",
         [&selection](String const& v)->VoidFunction {
-            const unsigned n = parse_unsigned<unsigned>(v);
+            const unsigned n = Bench::parse_unsigned<unsigned>(v);
             if (n == 0u || n > 16u) throw std::invalid_argument("invalid seeds");
             return [&selection,n] { selection.seeds = n; };
         }));
     result.append(make_valued_argument_parser(
         "", "max-steps", "Time-to-target budget (1..100000; default 500)",
         [&selection](String const& v)->VoidFunction {
-            const unsigned n = parse_unsigned<unsigned>(v);
+            const unsigned n = Bench::parse_unsigned<unsigned>(v);
             if (n == 0u || n > 100000u) throw std::invalid_argument("invalid max-steps");
             return [&selection,n] { selection.max_steps = n; };
         }));
@@ -240,26 +227,43 @@ double checksum(NeuralTrainingSession const& trainer) {
     return total;
 }
 
+// One complete optimizer training trial is one timed Runner operation.
+// Preparation (including the seeded trainer) and post-trial correctness
+// checks are both outside the timing window.
 struct Fixed {
     double ns_step;
     double final_loss;
     double checksum;
 };
 
-Fixed time_steps(Workload const& w, Options const& opt, Variant v) {
-    NeuralTrainingSession trainer(w.initial,optimizer(opt,v));
-    auto start = std::chrono::steady_clock::now();
-    for(unsigned i=0u;i<opt.iterations;++i)
-        (void)trainer.train_batch(w.inputs,w.targets);
-    auto end = std::chrono::steady_clock::now();
-    if(trainer.steps()!=static_cast<std::size_t>(opt.iterations))
-        throw std::runtime_error("invalid number of training steps");
-    const double ns=std::chrono::duration<double,std::nano>(end-start).count()
-        / static_cast<double>(opt.iterations);
-    const double loss=trainer.loss_batch(w.inputs,w.targets);
-    if(!std::isfinite(ns) || ns<=0.0 || !std::isfinite(loss))
-        throw std::runtime_error("invalid fixed timing");
-    return {ns,loss,checksum(trainer)};
+Fixed time_steps(Workload const& w,Options const& options,Variant v,
+                 Bench::Runner const& runner) {
+    std::unique_ptr<NeuralTrainingSession> trainer;
+    double loss=0.0;
+    double digest=0.0;
+    auto const samples=runner.run(std::string(name(v))+"/fixed",1u,
+        [&] {
+            trainer=std::make_unique<NeuralTrainingSession>(
+                w.initial,optimizer(options,v));
+        },
+        [&] {
+            for(unsigned step=0u;step<options.iterations;++step)
+                (void)trainer->train_batch(w.inputs,w.targets);
+            Bench::keep_alive(*trainer);
+        },
+        [&] {
+            if(trainer->steps()!=static_cast<std::size_t>(options.iterations))
+                throw std::runtime_error("invalid number of training steps");
+            loss=trainer->loss_batch(w.inputs,w.targets);
+            if(!std::isfinite(loss))
+                throw std::runtime_error("nonfinite fixed-step loss");
+            digest=checksum(*trainer);
+        },
+        static_cast<double>(options.iterations));
+    double const ns=samples.values().at(0u);
+    if(!std::isfinite(ns)||ns<=0.0)
+        throw std::runtime_error("invalid fixed-step timing");
+    return {ns,loss,digest};
 }
 
 struct Target {
@@ -270,45 +274,56 @@ struct Target {
     double checksum;
 };
 
-Target time_to_target(Workload const& w, Options const& opt, Variant v) {
-    NeuralTrainingSession trainer(w.initial,optimizer(opt,v));
-    double loss=trainer.loss_batch(w.inputs,w.targets);
+Target time_to_target(Workload const& w,Options const& options,Variant v,
+                      Bench::Runner const& runner) {
+    std::unique_ptr<NeuralTrainingSession> trainer;
+    double loss=0.0;
+    double digest=0.0;
     unsigned steps=0u;
-    auto start=std::chrono::steady_clock::now();
-    while(loss>opt.target_loss && steps<opt.max_steps) {
-        (void)trainer.train_batch(w.inputs,w.targets);
-        ++steps;
-        // Include every post-step loss evaluation in time-to-target.
-        loss=trainer.loss_batch(w.inputs,w.targets);
-    }
-    auto end=std::chrono::steady_clock::now();
-    const double ms=std::chrono::duration<double,std::milli>(end-start).count();
-    if(trainer.steps()!=static_cast<std::size_t>(steps) ||
-       !std::isfinite(ms) || ms<0.0 || !std::isfinite(loss))
+    auto const samples=runner.run(std::string(name(v))+"/target",1u,
+        [&] {
+            trainer=std::make_unique<NeuralTrainingSession>(
+                w.initial,optimizer(options,v));
+            loss=trainer->loss_batch(w.inputs,w.targets);
+            steps=0u;
+        },
+        [&] {
+            while(loss>options.target_loss && steps<options.max_steps) {
+                (void)trainer->train_batch(w.inputs,w.targets);
+                ++steps;
+                // Include EVERY post-step loss evaluation in the timer.
+                loss=trainer->loss_batch(w.inputs,w.targets);
+            }
+            Bench::keep_alive(*trainer);
+        },
+        [&] {
+            if(trainer->steps()!=static_cast<std::size_t>(steps) ||
+               !std::isfinite(loss))
+                throw std::runtime_error("invalid convergence result");
+            digest=checksum(*trainer);
+        });
+    double const ms=samples.values().at(0u)/1e6;
+    if(!std::isfinite(ms)||ms<0.0)
         throw std::runtime_error("invalid convergence timing");
-    return {loss<=opt.target_loss,steps,ms,loss,checksum(trainer)};
+    return {loss<=options.target_loss,steps,ms,loss,digest};
 }
 
-double median(std::vector<double> times) {
-    if(times.empty()) throw std::runtime_error("empty timing data");
-    std::sort(times.begin(),times.end());
-    return times[times.size()/2u];
-}
-
+// The original replay checks compare the paired samples exactly. Keep
+// that correctness property independent of the selected display columns.
 struct Summary {
-    double ns_step;
+    Bench::Statistics fixed_timing;
+    Bench::Statistics target_timing;
     double final_loss;
     bool reached;
     unsigned steps;
-    double target_ms;
     double last_loss;
 };
 
-Summary summarize(std::vector<Fixed> const& fixed,
-                  std::vector<Target> const& targets) {
-    if(fixed.empty() || fixed.size()!=targets.size())
+Summary summarize_trials(std::vector<Fixed> const& fixed,
+                         std::vector<Target> const& targets) {
+    if(fixed.empty()||fixed.size()!=targets.size())
         throw std::runtime_error("unpaired timing samples");
-    std::vector<double> fixed_times,target_times;
+    Bench::Samples fixed_times,target_times;
     for(std::size_t i=0u;i<fixed.size();++i) {
         if(fixed[i].final_loss!=fixed[0].final_loss ||
            fixed[i].checksum!=fixed[0].checksum ||
@@ -317,121 +332,160 @@ Summary summarize(std::vector<Fixed> const& fixed,
            targets[i].final_loss!=targets[0].final_loss ||
            targets[i].checksum!=targets[0].checksum)
             throw std::runtime_error("nondeterministic replay");
-        fixed_times.push_back(fixed[i].ns_step);
-        target_times.push_back(targets[i].milliseconds);
+        fixed_times.add(fixed[i].ns_step);
+        target_times.add(targets[i].milliseconds*1e6);
     }
-    return {median(fixed_times),fixed[0].final_loss,targets[0].reached,
-            targets[0].steps,median(target_times),targets[0].final_loss};
-}
-
-bool help_requested(List<String> const& args) {
-    return std::find(args.begin(), args.end(), String("--help")) != args.end()
-        || std::find(args.begin(), args.end(), String("-h")) != args.end();
+    return {Bench::summarize(fixed_times),Bench::summarize(target_times),
+            fixed[0].final_loss,targets[0].reached,targets[0].steps,
+            targets[0].final_loss};
 }
 
 } // namespace
 
-int main(int argc, char const* argv[]) {
-    using namespace Ariadne;
-    ThreadManager::instance();
-    Logger::instance().configuration().set_verbosity(1u);
+int main(int argc,char const* argv[]) {
     try {
         Options options;
-        ThreadingCommandLineInterface cli;
-        cli.add(CommandLineContribution("neural-optimizer-benchmark",parsers(options)));
-        List<String> arguments;
-        for(int i=0;i<argc;++i) arguments.append(String(argv[i]));
-        if(!cli.acquire(arguments)) return help_requested(arguments) ? 0 : 1;
+        Bench::CommandLine cli;
+        cli.add(CommandLineContribution("neural-optimizer-benchmark",
+                                        parsers(options)));
+        if(!cli.acquire(argc,argv))return 0;
         if(ThreadManager::instance().concurrency()!=0u)
             throw std::invalid_argument(
                 "NativeCpu training is sequential: use --concurrency 0");
 
-        constexpr Variant variants[] = {Variant::Sgd,Variant::SgdMomentum,Variant::AdamW};
+        constexpr Variant variants[]={
+            Variant::Sgd,Variant::SgdMomentum,Variant::AdamW};
         constexpr std::size_t count=3u;
         struct Aggregate {
-            std::vector<double> fixed_times,target_times;
+            Bench::Samples fixed_times,target_times;
             unsigned hits=0u;
         };
         Aggregate aggregates[count];
+
+        // The optimizer order still rotates across paired seeds AND trials.
+        // Runner uses zero internal warm-ups here because that rotation must
+        // also encompass the CLI-selected global warm-up trials.
+        Bench::Runner runner(0u,options.seeds*count);
+        Bench::Report fixed_report("ANN fixed-step timings (ns/step)",
+                                  cli.summary_fields());
+        fixed_report.set_dimension_columns({
+            {"Seed"},{"Optimizer"},{"Fixed loss",0u,Bench::TableAlignment::Right},
+            {"Target steps",0u,Bench::TableAlignment::Right},
+            {"Target ms",0u,Bench::TableAlignment::Right},
+            {"Last loss",0u,Bench::TableAlignment::Right}
+        });
+        auto rules=Bench::TableOptions::ruled();
+        rules.group_columns={0u};
+        fixed_report.set_table_options(rules);
+
+        Bench::Report target_report("ANN time-to-target timings (ns)",
+                                   cli.summary_fields());
+        target_report.set_dimension_columns({
+            {"Seed"},{"Optimizer"},{"Reached"},{"Steps",0u,Bench::TableAlignment::Right}
+        });
+        target_report.set_table_options(rules);
+
         LOGGING_PRINTLN("Ariadne ANN | SGD, SGD+momentum, AdamW")
-        LOGGING_PRINTLN("Network 8 -> " << options.hidden_width << " Tanh -> 1 Identity"
-            << " | batch=" << options.batch_size << " | paired seeds=" << options.seeds
-            << " | samples=" << options.samples << " + warm-up"
-            << " | fixed steps=" << options.iterations
-            << " | target budget=" << options.max_steps)
+        LOGGING_PRINTLN("Network 8 -> "<<options.hidden_width
+            <<" Tanh -> 1 Identity | batch="<<options.batch_size
+            <<" | paired seeds="<<options.seeds
+            <<" | samples="<<options.samples
+            <<" | warmups="<<cli.warmups()
+            <<" | fixed steps="<<options.iterations
+            <<" | target budget="<<options.max_steps)
         LOGGING_PRINTLN("Loss = 0.5 * sum squared output errors, averaged over samples")
-        LOGGING_PRINTLN("Target <= " << options.target_loss << " | SGD lr=" << options.sgd_rate
-            << " | momentum=" << options.momentum << " | AdamW lr=" << options.adamw_rate
-            << " | decay=" << options.weight_decay)
+        LOGGING_PRINTLN("Target <= "<<options.target_loss
+            <<" | SGD lr="<<options.sgd_rate
+            <<" | momentum="<<options.momentum
+            <<" | AdamW lr="<<options.adamw_rate
+            <<" | decay="<<options.weight_decay)
         LOGGING_PRINTLN("Fixed-step timing excludes repeated loss checks;"
-            " time-to-target timing includes post-step checks.")
+            " time-to-target includes post-step checks.")
+
         for(unsigned si=0u;si<options.seeds;++si) {
             Options seeded=options;
-            seeded.seed += static_cast<std::uint64_t>(si);
-            auto w=make_workload(seeded);
-            NeuralTrainingSession baseline(w.initial,NeuralOptimizerOptions{});
-            const double initial_loss=baseline.loss_batch(w.inputs,w.targets);
+            seeded.seed+=static_cast<std::uint64_t>(si);
+            Workload const workload=make_workload(seeded);
+            NeuralTrainingSession baseline(
+                workload.initial,NeuralOptimizerOptions{});
+            double const initial_loss=baseline.loss_batch(
+                workload.inputs,workload.targets);
+            LOGGING_PRINTLN("Seed="<<seeded.seed
+                <<" | initial loss="<<Bench::Table::number(initial_loss,10u))
             std::vector<Fixed> fixed[count];
             std::vector<Target> target[count];
-            for(unsigned sample=0u;sample<=options.samples;++sample) {
+            if(options.samples>std::numeric_limits<unsigned>::max()-cli.warmups())
+                throw std::overflow_error("sample and warm-up count overflow");
+            unsigned const total=options.samples+cli.warmups();
+            for(unsigned sample=0u;sample<total;++sample) {
                 for(std::size_t offset=0u;offset<count;++offset) {
-                    const std::size_t k=(offset+static_cast<std::size_t>(sample)
+                    std::size_t const k=(
+                        offset+static_cast<std::size_t>(sample)
                         +static_cast<std::size_t>(si))%count;
-                    const auto f=time_steps(w,options,variants[k]);
-                    const auto t=time_to_target(w,options,variants[k]);
-                    if(sample>0u) {
+                    Fixed const f=time_steps(workload,options,variants[k],runner);
+                    Target const t=time_to_target(workload,options,variants[k],runner);
+                    if(sample>=cli.warmups()) {
                         fixed[k].push_back(f);
                         target[k].push_back(t);
                     }
                 }
             }
-            LOGGING_PRINTLN(std::string(95u,'='))
-            LOGGING_PRINTLN("Seed=" << seeded.seed << " | initial loss="
-                << std::setprecision(10) << initial_loss)
-            LOGGING_PRINTLN(std::left << std::setw(16) << "Optimizer" << std::right
-                << std::setw(14) << "ns/step" << std::setw(16) << "fixed loss"
-                << std::setw(14) << "target step" << std::setw(17) << "target ms"
-                << std::setw(18) << "last loss")
             for(std::size_t k=0u;k<count;++k) {
-                const Summary x=summarize(fixed[k],target[k]);
-                aggregates[k].fixed_times.push_back(x.ns_step);
-                if(x.reached) {
+                Summary const row=summarize_trials(fixed[k],target[k]);
+                aggregates[k].fixed_times.add(row.fixed_timing.median);
+                if(row.reached) {
                     ++aggregates[k].hits;
-                    aggregates[k].target_times.push_back(x.target_ms);
+                    aggregates[k].target_times.add(row.target_timing.median);
                 }
-                LOGGING_PRINTLN(std::left << std::setw(16) << name(variants[k])
-                    << std::right << std::fixed << std::setprecision(3)
-                    << std::setw(14) << x.ns_step
-                    << std::setw(16) << std::setprecision(9) << x.final_loss
-                    << std::setw(14) << (x.reached ? std::to_string(x.steps)
-                        : ">" + std::to_string(options.max_steps))
-                    << std::setw(17) << (x.reached ? std::to_string(x.target_ms)
-                        : std::string("censored"))
-                    << std::setw(18) << x.last_loss)
+                std::string const seed=std::to_string(seeded.seed);
+                std::string const optimizer_name=name(variants[k]);
+                fixed_report.add_row({
+                    seed,optimizer_name,
+                    Bench::Table::number(row.final_loss,9u),
+                    row.reached?std::to_string(row.steps)
+                               : ">"+std::to_string(options.max_steps),
+                    row.reached?Bench::Table::number(
+                                      row.target_timing.median/1e6,3u)
+                               : "censored",
+                    Bench::Table::number(row.last_loss,9u)
+                },row.fixed_timing);
+                target_report.add_row({
+                    seed,optimizer_name,row.reached?"yes":"no",
+                    std::to_string(row.steps)
+                },row.target_timing);
             }
         }
-        LOGGING_PRINTLN(std::string(95u,'='))
-        LOGGING_PRINTLN("Medians across paired seeds (unreached target runs are censored)")
+        fixed_report.print();
+        target_report.print();
+
+        Bench::Table aggregated({
+            {"Optimizer"},
+            {"Median ns/step",0u,Bench::TableAlignment::Right},
+            {"Target hits",0u,Bench::TableAlignment::Right},
+            {"Median target ms",0u,Bench::TableAlignment::Right}
+        },Bench::TableOptions::ruled());
         for(std::size_t k=0u;k<count;++k) {
-            auto const& a=aggregates[k];
-            LOGGING_PRINTLN(name(variants[k]) << ": median fixed-step time "
-                << std::fixed << std::setprecision(3) << median(a.fixed_times)
-                << " ns/step | target reached " << a.hits << "/" << options.seeds)
-            if(a.hits==options.seeds) {
-                LOGGING_PRINTLN("  median time-to-target across seeds = "
-                    << std::setprecision(3) << median(a.target_times) << " ms")
-            } else {
-                LOGGING_PRINTLN("  time-to-target aggregate not reported"
-                    " because some paired runs were censored.")
-            }
+            Aggregate const& group=aggregates[k];
+            double const fixed_ns=Bench::summarize(group.fixed_times).median;
+            std::string const target_ms=group.hits==options.seeds
+                ? Bench::Table::number(
+                    Bench::summarize(group.target_times).median/1e6,3u)
+                : "censored";
+            aggregated.add_row({
+                name(variants[k]),Bench::Table::number(fixed_ns),
+                std::to_string(group.hits)+"/"+std::to_string(options.seeds),
+                target_ms
+            });
         }
+        LOGGING_PRINTLN("Medians across paired seeds (unreached targets are censored)")
+        LOGGING_PRINTLN(aggregated.str())
         LOGGING_PRINTLN("Every trial restarts from the same seeded model/data;"
-            " algorithm order rotates; a warm-up is excluded.")
+            " algorithm order rotates; CLI warm-ups are excluded.")
         LOGGING_PRINTLN("Time-to-target includes loss evaluations after every update;"
             " fixed-step timing does not. No CI speed or convergence threshold.")
         return 0;
-    } catch(std::exception const& e) {
-        LOGGING_PRINTLN("benchmark_optimizers: " << e.what())
+    } catch(std::exception const& error) {
+        LOGGING_PRINTLN("benchmark_optimizers: "<<error.what())
         return 1;
     }
 }
