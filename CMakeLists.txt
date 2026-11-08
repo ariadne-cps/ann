@@ -23,8 +23,6 @@ if(EXISTS "${PROJECT_SOURCE_DIR}/.git")
     # Pinned child commits guarantee their internal consistency.
     require_same_dependency_commit(Build CHAINS
         "build" "threading|build" "testing|build")
-    require_same_dependency_commit(Testing CHAINS
-        "testing" "threading|testing")
 endif()
 
 setup_project()
