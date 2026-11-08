@@ -183,32 +183,32 @@ Workload make_workload(Options const& options) {
     return workload;
 }
 
-enum class Variant { Sgd, SgdMomentum, AdamW };
+enum class OptimizerVariant { Sgd, SgdMomentum, AdamW };
 
-char const* name(Variant v) {
+char const* name(OptimizerVariant v) {
     switch(v) {
-        case Variant::Sgd: return "SGD";
-        case Variant::SgdMomentum: return "SGD+momentum";
-        case Variant::AdamW: return "AdamW";
+        case OptimizerVariant::Sgd: return "SGD";
+        case OptimizerVariant::SgdMomentum: return "SGD+momentum";
+        case OptimizerVariant::AdamW: return "AdamW";
         default: throw std::invalid_argument("invalid variant");
     }
 }
 
-NeuralOptimizerOptions optimizer(Options const& options, Variant v) {
+NeuralOptimizerOptions optimizer(Options const& options, OptimizerVariant v) {
     NeuralOptimizerOptions opt;
     opt.weight_decay = options.weight_decay;
     switch(v) {
-        case Variant::Sgd:
+        case OptimizerVariant::Sgd:
             opt.kind = NeuralOptimizerKind::Sgd;
             opt.learning_rate = options.sgd_rate;
             opt.momentum = 0.0;
             break;
-        case Variant::SgdMomentum:
+        case OptimizerVariant::SgdMomentum:
             opt.kind = NeuralOptimizerKind::Sgd;
             opt.learning_rate = options.sgd_rate;
             opt.momentum = options.momentum;
             break;
-        case Variant::AdamW:
+        case OptimizerVariant::AdamW:
             opt.kind = NeuralOptimizerKind::AdamW;
             opt.learning_rate = options.adamw_rate;
             break;
@@ -236,7 +236,7 @@ struct Fixed {
     double checksum;
 };
 
-Fixed time_steps(Workload const& w,Options const& options,Variant v,
+Fixed time_steps(Workload const& w,Options const& options,OptimizerVariant v,
                  Bench::Runner const& runner) {
     std::unique_ptr<NeuralTrainingSession> trainer;
     double loss=0.0;
@@ -274,7 +274,7 @@ struct Target {
     double checksum;
 };
 
-Target time_to_target(Workload const& w,Options const& options,Variant v,
+Target time_to_target(Workload const& w,Options const& options,OptimizerVariant v,
                       Bench::Runner const& runner) {
     std::unique_ptr<NeuralTrainingSession> trainer;
     double loss=0.0;
@@ -353,8 +353,8 @@ int main(int argc,char const* argv[]) {
             throw std::invalid_argument(
                 "NativeCpu training is sequential: use --concurrency 0");
 
-        constexpr Variant variants[]={
-            Variant::Sgd,Variant::SgdMomentum,Variant::AdamW};
+        constexpr OptimizerVariant variants[]={
+            OptimizerVariant::Sgd,OptimizerVariant::SgdMomentum,OptimizerVariant::AdamW};
         constexpr std::size_t count=3u;
         struct Aggregate {
             Bench::Samples fixed_times,target_times;
