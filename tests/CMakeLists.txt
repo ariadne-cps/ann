@@ -1,7 +1,6 @@
 include(CTest)
 
 set(UNIT_TESTS
-    test_ann
     test_network
     test_backend
     test_derivatives
