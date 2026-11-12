@@ -22,6 +22,10 @@
  *  along with Ariadne ANN.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/** @file ann/ann.hpp
+ *  @brief ANN module version and bootstrap declarations.
+ */
+
 #ifndef ARIADNE_ANN_HPP
 #define ARIADNE_ANN_HPP
 
