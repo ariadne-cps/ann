@@ -1,5 +1,5 @@
 /***************************************************************************
- *            include/ann/sha256.hpp
+ *            ann/sha256.hpp
  *
  *  Copyright  2026  Luca Geretti
  *
@@ -22,6 +22,10 @@
  *  along with Ariadne ANN.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/** @file ann/sha256.hpp
+ *  @brief SHA-256 digest implementation for canonical neural model identities.
+ */
+
 #ifndef ARIADNE_ANN_SHA256_HPP
 #define ARIADNE_ANN_SHA256_HPP
 
@@ -33,11 +37,14 @@
 
 namespace Ariadne::Detail {
 
-// FIPS 180-4 SHA-256 helper for canonical model identity.
+/** @brief Implement incremental SHA-256 hashing under FIPS 180-4. */
 class Sha256 {
 public:
+    /** @brief Append raw bytes to the incremental SHA-256 hash. */
     void update(std::string_view bytes);
+    /** @brief Hash a 64-bit integer in the canonical byte order. */
     void update_u64(std::uint64_t n);
+    /** @brief Finalize the digest and return 64 lowercase hexadecimal characters. */
     std::string hex_digest();
 
 private:
@@ -48,6 +55,7 @@ private:
     std::array<std::uint8_t,64u> block_{};
     std::uint64_t bytes_processed_=0u;
     std::size_t buffered_=0u;
+    /** @brief Compress one 64-byte SHA-256 message block. */
     void compress(std::uint8_t const* bytes);
 };
 

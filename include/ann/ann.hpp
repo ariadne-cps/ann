@@ -27,10 +27,6 @@
 
 namespace Ariadne {
 
-/** @file ann/ann.hpp
- *  @brief Ariadne ANN module version and bootstrap declarations.
- */
-
 /** @brief Return the Ariadne ANN module version.
  *  @return A static, null-terminated semantic-version string.
  */

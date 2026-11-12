@@ -22,6 +22,10 @@
  *  along with Ariadne ANN.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/** @file ariadne-ann.hpp
+ *  @brief Public umbrella header for network, execution, training and serialization APIs.
+ */
+
 #ifndef ARIADNE_ANN_MODULE_HPP
 #define ARIADNE_ANN_MODULE_HPP
 

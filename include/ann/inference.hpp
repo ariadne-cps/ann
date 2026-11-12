@@ -22,24 +22,33 @@
  *  along with Ariadne ANN.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/** @file ann/inference.hpp
+ *  @brief Native CPU inference and reverse-mode derivative operations.
+ */
+
 #ifndef ARIADNE_ANN_CPU_INFERENCE_HPP
 #define ARIADNE_ANN_CPU_INFERENCE_HPP
 #include "ann/network.hpp"
 #include "ann/derivatives.hpp"
 #include <vector>
 namespace Ariadne::NeuralCpu {
+/** @brief Evaluate a frozen model on one finite input vector. */
 std::vector<double> infer(NeuralParameterSnapshot const& snapshot,
                           std::vector<double> const& input);
+/** @brief Evaluate independent input rows using the native CPU backend. */
 std::vector<std::vector<double>> infer_batch(
     NeuralParameterSnapshot const& snapshot,
     std::vector<std::vector<double>> const& inputs);
+/** @brief Compute a reverse-mode vector-Jacobian product for one sample. */
 NeuralGradientResult differentiate(
     NeuralParameterSnapshot const& snapshot,
     std::vector<double> const& input,
     std::vector<double> const& output_cotangent);
+/** @brief Compute the full Jacobian of outputs with respect to inputs. */
 std::vector<std::vector<double>> input_jacobian(
     NeuralParameterSnapshot const& snapshot,
     std::vector<double> const& input);
+/** @brief Reduce per-sample gradients by sum or mean across a batch. */
 NeuralBatchGradientResult differentiate_batch(
     NeuralParameterSnapshot const& snapshot,
     std::vector<std::vector<double>> const& inputs,
