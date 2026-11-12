@@ -73,11 +73,11 @@ struct NeuralDenseLayerSpec {
  *  A backend is free to copy and transpose these values into native storage.
  */
 struct NeuralDenseLayerLayout {
-    std::size_t inputs;         ///< Number of inputs to this layer.
-    std::size_t outputs;        ///< Number of outputs of this layer.
-    NeuralActivation activation;///< Activation applied after bias addition.
-    std::size_t weights_offset; ///< First weight in the flattened parameter array.
-    std::size_t biases_offset;  ///< First bias in the flattened parameter array.
+    std::size_t inputs;          ///< Number of inputs to this layer.
+    std::size_t outputs;         ///< Number of outputs of this layer.
+    NeuralActivation activation; ///< Activation applied after bias addition.
+    std::size_t weights_offset;  ///< First weight in the flattened parameter array.
+    std::size_t biases_offset;   ///< First bias in the flattened parameter array.
 };
 
 /** @brief Immutable-by-interface topology and indexing of a dense network.
@@ -94,7 +94,7 @@ struct NeuralDenseLayerLayout {
  *  followed by the layer's activation. Evaluation is not implemented in M1.
  */
 class NeuralNetwork {
-public:
+  public:
     /** @brief Build a network and compute canonical parameter offsets.
      *  @param input_dimension Positive number of network inputs.
      *  @param layers Non-empty layer specifications, each with positive outputs.
@@ -110,9 +110,9 @@ public:
     /** @brief Total number of weights plus biases, across all layers. */
     std::size_t parameter_count() const noexcept;
     /** @brief Read-only layer descriptions with computed parameter offsets. */
-    std::vector<NeuralDenseLayerLayout> const& layers() const noexcept;
+    const std::vector<NeuralDenseLayerLayout>& layers() const noexcept;
 
-private:
+  private:
     std::size_t input_dimension_;
     std::size_t output_dimension_;
     std::size_t parameter_count_;
@@ -131,7 +131,7 @@ private:
  *  future work, as specified in doc/neural_design.md.
  */
 class NeuralParameterSnapshot {
-public:
+  public:
     /** @brief Copy or move the topology and flattened parameter array.
      *  @param network Network with an established canonical parameter count.
      *  @param values Exactly network.parameter_count() finite binary64 values.
@@ -140,13 +140,13 @@ public:
     NeuralParameterSnapshot(NeuralNetwork network, std::vector<double> values);
 
     /** @brief Frozen canonical topology associated with the parameters. */
-    NeuralNetwork const& network() const noexcept;
+    const NeuralNetwork& network() const noexcept;
     /** @brief Read-only flattened canonical weights and biases. */
-    std::vector<double> const& values() const noexcept;
+    const std::vector<double>& values() const noexcept;
     /** @brief Export an independent copy of the canonical parameter array. */
     std::vector<double> export_values() const;
 
-private:
+  private:
     NeuralNetwork network_;
     std::vector<double> values_;
 };

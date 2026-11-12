@@ -27,7 +27,6 @@
  */
 
 #include "ann/training.hpp"
-#include "ann/backend.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -35,6 +34,8 @@
 #include <numeric>
 #include <stdexcept>
 #include <utility>
+
+#include "ann/backend.hpp"
 
 namespace Ariadne {
 namespace {
@@ -45,37 +46,37 @@ double finite(double x) {
     return x;
 }
 
-void validate_optimizer(NeuralOptimizerOptions const& opt) {
-    if (!std::isfinite(opt.learning_rate) || opt.learning_rate <= 0.0
-        || !std::isfinite(opt.weight_decay) || opt.weight_decay < 0.0
-        || !std::isfinite(opt.momentum) || opt.momentum < 0.0 || opt.momentum >= 1.0
-        || !std::isfinite(opt.beta1) || opt.beta1 < 0.0 || opt.beta1 >= 1.0
-        || !std::isfinite(opt.beta2) || opt.beta2 < 0.0 || opt.beta2 >= 1.0
-        || !std::isfinite(opt.epsilon) || opt.epsilon <= 0.0)
+void validate_optimizer(const NeuralOptimizerOptions& opt) {
+    if (!std::isfinite(opt.learning_rate) || opt.learning_rate <= 0.0 || !std::isfinite(opt.weight_decay) || opt.weight_decay < 0.0 || !std::isfinite(opt.momentum) || opt.momentum < 0.0 || opt.momentum >= 1.0 || !std::isfinite(opt.beta1) || opt.beta1 < 0.0 || opt.beta1 >= 1.0 || !std::isfinite(opt.beta2) || opt.beta2 < 0.0 || opt.beta2 >= 1.0 || !std::isfinite(opt.epsilon) || opt.epsilon <= 0.0)
         throw std::invalid_argument("Invalid neural optimizer hyperparameter");
     switch (opt.kind) {
-        case NeuralOptimizerKind::Sgd: return;
+        case NeuralOptimizerKind::Sgd:
+            return;
         case NeuralOptimizerKind::AdamW:
             if (opt.momentum != 0.0)
                 throw std::invalid_argument("AdamW does not use SGD momentum");
             return;
-        default: throw std::invalid_argument("Unknown neural optimizer");
+        default:
+            throw std::invalid_argument("Unknown neural optimizer");
     }
 }
 
-void validate_loss(NeuralNetwork const& model, NeuralLossKind kind) {
+void validate_loss(const NeuralNetwork& model, NeuralLossKind kind) {
     switch (kind) {
-        case NeuralLossKind::MeanSquaredError: return;
+        case NeuralLossKind::MeanSquaredError:
+            return;
         case NeuralLossKind::BinaryCrossEntropyWithLogits:
             if (model.layers().back().activation != NeuralActivation::Identity)
                 throw std::invalid_argument("BCEWithLogits requires Identity output");
             return;
-        default: throw std::invalid_argument("Unknown neural loss");
+        default:
+            throw std::invalid_argument("Unknown neural loss");
     }
 }
 
 double sigmoid(double x) {
-    if (x >= 0.0) return 1.0 / (1.0 + std::exp(-x));
+    if (x >= 0.0)
+        return 1.0 / (1.0 + std::exp(-x));
     const double e = std::exp(x);
     return e / (1.0 + e);
 }
@@ -85,18 +86,18 @@ struct LossEvaluation {
     std::vector<std::vector<double>> output_cotangents;
 };
 
-LossEvaluation evaluate(NeuralExecutionSession const& execution,
+LossEvaluation evaluate(const NeuralExecutionSession& execution,
                         NeuralLossKind kind,
-                        std::vector<std::vector<double>> const& inputs,
-                        std::vector<std::vector<double>> const& targets,
+                        const std::vector<std::vector<double>>& inputs,
+                        const std::vector<std::vector<double>>& targets,
                         bool with_gradient) {
     if (inputs.empty() || inputs.size() != targets.size())
         throw std::invalid_argument("Neural training batch must be nonempty and matched");
     const std::size_t outputs = execution.snapshot().network().output_dimension();
-    for (auto const& row : targets) {
+    for (const auto& row: targets) {
         if (row.size() != outputs)
             throw std::invalid_argument("Wrong neural training target dimension");
-        for (double value : row) {
+        for (double value: row) {
             if (!std::isfinite(value) ||
                 (kind == NeuralLossKind::BinaryCrossEntropyWithLogits &&
                  (value < 0.0 || value > 1.0)))
@@ -106,11 +107,13 @@ LossEvaluation evaluate(NeuralExecutionSession const& execution,
 
     auto predictions = execution.infer_batch(inputs);
     std::vector<std::vector<double>> cotangents;
-    if (with_gradient) cotangents.reserve(inputs.size());
+    if (with_gradient)
+        cotangents.reserve(inputs.size());
     double total = 0.0;
     for (std::size_t n = 0; n < inputs.size(); ++n) {
         std::vector<double> cotangent;
-        if (with_gradient) cotangent.reserve(outputs);
+        if (with_gradient)
+            cotangent.reserve(outputs);
         for (std::size_t o = 0; o < outputs; ++o) {
             const double y = predictions[n][o], target = targets[n][o];
             double sample_loss = 0.0;
@@ -134,9 +137,11 @@ LossEvaluation evaluate(NeuralExecutionSession const& execution,
                 derivative = finite(sigmoid(y) - target);
             }
             total = finite(total + sample_loss);
-            if (with_gradient) cotangent.push_back(derivative);
+            if (with_gradient)
+                cotangent.push_back(derivative);
         }
-        if (with_gradient) cotangents.push_back(std::move(cotangent));
+        if (with_gradient)
+            cotangents.push_back(std::move(cotangent));
     }
     const double divisor = static_cast<double>(inputs.size());
     return {finite(total / divisor), std::move(cotangents)};
@@ -152,7 +157,7 @@ std::uint64_t splitmix64(std::uint64_t& state) noexcept {
 
 double uniform01(std::uint64_t& state) {
     return static_cast<double>(splitmix64(state) >> 11) *
-        (1.0 / 9007199254740992.0);
+           (1.0 / 9007199254740992.0);
 }
 
 } // namespace
@@ -170,7 +175,7 @@ NeuralTrainingSession::NeuralTrainingSession(
       second_moment_(snapshot_.network().parameter_count(), 0.0) {
     validate_optimizer(options_);
     validate_loss(snapshot_.network(), loss_);
-    auto const& layers = snapshot_.network().layers();
+    const auto& layers = snapshot_.network().layers();
     if (trainable_layers_.empty())
         trainable_layers_.assign(layers.size(), true);
     if (trainable_layers_.size() != layers.size())
@@ -179,11 +184,12 @@ NeuralTrainingSession::NeuralTrainingSession(
                      [](bool value) { return value; }))
         throw std::invalid_argument("Neural training requires a trainable layer");
     for (std::size_t layer = 0; layer < layers.size(); ++layer) {
-        if (!trainable_layers_[layer]) continue;
+        if (!trainable_layers_[layer])
+            continue;
         const std::size_t begin = layers[layer].weights_offset;
         const std::size_t end = layer + 1u < layers.size()
-            ? layers[layer + 1u].weights_offset
-            : snapshot_.network().parameter_count();
+                                  ? layers[layer + 1u].weights_offset
+                                  : snapshot_.network().parameter_count();
         for (std::size_t parameter = begin; parameter < end; ++parameter)
             trainable_parameters_[parameter] = true;
     }
@@ -215,7 +221,7 @@ NeuralTrainingSession::NeuralTrainingSession(NeuralTrainingCheckpoint checkpoint
 
 std::size_t NeuralTrainingSession::steps() const noexcept { return steps_; }
 
-std::vector<bool> const& NeuralTrainingSession::trainable_layers() const noexcept {
+const std::vector<bool>& NeuralTrainingSession::trainable_layers() const noexcept {
     return trainable_layers_;
 }
 
@@ -229,15 +235,15 @@ NeuralTrainingCheckpoint NeuralTrainingSession::export_checkpoint() const {
 }
 
 double NeuralTrainingSession::loss_batch(
-    std::vector<std::vector<double>> const& inputs,
-    std::vector<std::vector<double>> const& targets) const {
+    const std::vector<std::vector<double>>& inputs,
+    const std::vector<std::vector<double>>& targets) const {
     NeuralExecutionSession execution(snapshot_);
     return evaluate(execution, loss_, inputs, targets, false).mean_loss;
 }
 
 double NeuralTrainingSession::train_batch(
-    std::vector<std::vector<double>> const& inputs,
-    std::vector<std::vector<double>> const& targets) {
+    const std::vector<std::vector<double>>& inputs,
+    const std::vector<std::vector<double>>& targets) {
     if (steps_ == std::numeric_limits<std::size_t>::max())
         throw std::overflow_error("Neural optimizer step count overflow");
     NeuralExecutionSession execution(snapshot_);
@@ -251,7 +257,8 @@ double NeuralTrainingSession::train_batch(
 
     if (options_.kind == NeuralOptimizerKind::Sgd) {
         for (std::size_t i = 0; i < updated.size(); ++i) {
-            if (!trainable_parameters_[i]) continue;
+            if (!trainable_parameters_[i])
+                continue;
             const double regularized = finite(
                 gradients.parameter_gradient[i] +
                 finite(options_.weight_decay * updated[i]));
@@ -262,13 +269,14 @@ double NeuralTrainingSession::train_batch(
         }
     } else {
         const double correction1 = 1.0 - std::pow(
-            options_.beta1, static_cast<double>(next_step));
+                                             options_.beta1, static_cast<double>(next_step));
         const double correction2 = 1.0 - std::pow(
-            options_.beta2, static_cast<double>(next_step));
+                                             options_.beta2, static_cast<double>(next_step));
         const double decay_factor = finite(
             1.0 - finite(options_.learning_rate * options_.weight_decay));
         for (std::size_t i = 0; i < updated.size(); ++i) {
-            if (!trainable_parameters_[i]) continue;
+            if (!trainable_parameters_[i])
+                continue;
             const double g = gradients.parameter_gradient[i];
             first[i] = finite(options_.beta1 * first[i] +
                               (1.0 - options_.beta1) * g);
@@ -277,8 +285,8 @@ double NeuralTrainingSession::train_batch(
             const double mhat = finite(first[i] / correction1);
             const double vhat = finite(second[i] / correction2);
             const double increment = finite(options_.learning_rate *
-                                             (mhat / (std::sqrt(vhat) +
-                                                      options_.epsilon)));
+                                            (mhat / (std::sqrt(vhat) +
+                                                     options_.epsilon)));
             updated[i] = finite(finite(updated[i] * decay_factor) - increment);
         }
     }
@@ -295,7 +303,7 @@ double NeuralTrainingSession::train_batch(
 NeuralParameterSnapshot neural_initialize_parameters(
     NeuralNetwork network, std::uint64_t seed) {
     std::vector<double> values(network.parameter_count(), 0.0);
-    for (auto const& layer : network.layers()) {
+    for (const auto& layer: network.layers()) {
         const double denom =
             static_cast<double>(layer.inputs) + static_cast<double>(layer.outputs);
         const double bound = std::sqrt(6.0 / denom);
@@ -310,10 +318,10 @@ NeuralParameterSnapshot neural_initialize_parameters(
 }
 
 NeuralParameterSnapshot neural_replace_output_head(
-    NeuralParameterSnapshot const& source,
+    const NeuralParameterSnapshot& source,
     NeuralDenseLayerSpec new_head,
     std::uint64_t seed) {
-    auto const& old_layers = source.network().layers();
+    const auto& old_layers = source.network().layers();
     std::vector<NeuralDenseLayerSpec> specs;
     specs.reserve(old_layers.size());
     for (std::size_t i = 0; i + 1u < old_layers.size(); ++i)
@@ -323,7 +331,7 @@ NeuralParameterSnapshot neural_replace_output_head(
     const std::size_t prefix_size = old_layers.back().weights_offset;
     std::vector<double> values(
         source.values().begin(), source.values().begin() +
-        static_cast<std::vector<double>::difference_type>(prefix_size));
+                                     static_cast<std::vector<double>::difference_type>(prefix_size));
     NeuralNetwork head_network(old_layers.back().inputs, {new_head});
     auto head_values = neural_initialize_parameters(std::move(head_network), seed)
                            .export_values();
@@ -341,7 +349,9 @@ std::vector<std::size_t> neural_shuffled_indices(
         const std::uint64_t threshold =
             (std::uint64_t{0} - bound) % bound;
         std::uint64_t draw;
-        do { draw = splitmix64(seed); } while (draw < threshold);
+        do {
+            draw = splitmix64(seed);
+        } while (draw < threshold);
         const std::size_t j = static_cast<std::size_t>(draw % bound);
         std::swap(indices[i - 1], indices[j]);
     }

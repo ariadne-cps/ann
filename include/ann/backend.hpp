@@ -31,8 +31,8 @@
 #ifndef ARIADNE_ANN_BACKEND_HPP
 #define ARIADNE_ANN_BACKEND_HPP
 
-#include "ann/network.hpp"
 #include "ann/derivatives.hpp"
+#include "ann/network.hpp"
 
 namespace Ariadne {
 
@@ -42,21 +42,21 @@ namespace Ariadne {
  *  LibTorch and MLX must remain optional integrations.
  */
 enum class NeuralBackendKind {
-    NativeCpu,       ///< Built-in, portable CPU execution engine.
-    AriadneValidated,///< Ariadne rigorous numerical evaluator.
-    LibTorch,        ///< Optional LibTorch C++ integration.
-    Mlx              ///< Optional MLX C++ integration.
+    NativeCpu,        ///< Built-in, portable CPU execution engine.
+    AriadneValidated, ///< Ariadne rigorous numerical evaluator.
+    LibTorch,         ///< Optional LibTorch C++ integration.
+    Mlx               ///< Optional MLX C++ integration.
 };
 
 /** @brief Feature-granular operations that an implementation may support. */
 enum class NeuralOperation {
-    ImportSnapshot,   ///< Import and inspect a frozen canonical model.
-    Inference,        ///< Evaluate one input sample approximately.
-    BatchInference,   ///< Evaluate multiple samples approximately.
-    InputDerivatives, ///< Compute input derivatives.
-    ParameterGradients,///< Compute gradients with respect to parameters.
-    Training,         ///< Perform one or more training steps.
-    ValidatedBounds   ///< Enclose network outputs rigorously.
+    ImportSnapshot,     ///< Import and inspect a frozen canonical model.
+    Inference,          ///< Evaluate one input sample approximately.
+    BatchInference,     ///< Evaluate multiple samples approximately.
+    InputDerivatives,   ///< Compute input derivatives.
+    ParameterGradients, ///< Compute gradients with respect to parameters.
+    Training,           ///< Perform one or more training steps.
+    ValidatedBounds     ///< Enclose network outputs rigorously.
 };
 
 /** @brief Whether a backend implementation is actually compiled and usable.
@@ -83,7 +83,7 @@ bool neural_backend_supports(NeuralBackendKind backend, NeuralOperation operatio
  *  NativeCpu training; validated bounds remain unsupported.
  */
 class NeuralExecutionSession {
-public:
+  public:
     /** @brief Import the model into a currently available backend.
      *  @param snapshot Canonical network and finite parameters.
      *  @param backend Selected implementation, defaulting to the native CPU.
@@ -96,7 +96,7 @@ public:
     /** @brief Selected implementation identity. */
     NeuralBackendKind backend() const noexcept;
     /** @brief Read-only imported snapshot, owned by this session. */
-    NeuralParameterSnapshot const& snapshot() const noexcept;
+    const NeuralParameterSnapshot& snapshot() const noexcept;
     /** @brief Export an independent frozen snapshot for another backend. */
     NeuralParameterSnapshot export_snapshot() const;
     /** @brief Query a concrete operation available through this frozen session.
@@ -110,13 +110,13 @@ public:
      *  @throws std::invalid_argument for invalid input shape or non-finite values.
      *  @throws std::overflow_error for a non-finite intermediate or output.
      */
-    std::vector<double> infer(std::vector<double> const& input) const;
+    std::vector<double> infer(const std::vector<double>& input) const;
 
     /** @brief Evaluate rows of shape [batch, input_dimension].
      *  Empty batches are accepted, and all rows validated before evaluation.
      */
     std::vector<std::vector<double>> infer_batch(
-        std::vector<std::vector<double>> const& inputs) const;
+        const std::vector<std::vector<double>>& inputs) const;
 
     /** @brief Reverse-mode vector-Jacobian product for c dot network(input).
      *
@@ -127,15 +127,15 @@ public:
      *  @throws std::overflow_error if any intermediate becomes non-finite.
      */
     NeuralGradientResult differentiate(
-        std::vector<double> const& input,
-        std::vector<double> const& output_cotangent) const;
+        const std::vector<double>& input,
+        const std::vector<double>& output_cotangent) const;
 
     /** @brief Full input Jacobian [output_dimension, input_dimension].
      *
      *  Constructed from reverse-mode unit output cotangents, in row order.
      */
     std::vector<std::vector<double>> input_jacobian(
-        std::vector<double> const& input) const;
+        const std::vector<double>& input) const;
 
     /** @brief Sum/mean per-sample VJPs, with corresponding input gradients.
      *
@@ -144,8 +144,8 @@ public:
      *  batches are invalid. No implicit loss function or optimizer update.
      */
     NeuralBatchGradientResult differentiate_batch(
-        std::vector<std::vector<double>> const& inputs,
-        std::vector<std::vector<double>> const& output_cotangents,
+        const std::vector<std::vector<double>>& inputs,
+        const std::vector<std::vector<double>>& output_cotangents,
         NeuralGradientReduction reduction = NeuralGradientReduction::Sum) const;
 
     /** @brief Require an operation without silently falling back.
@@ -153,7 +153,7 @@ public:
      */
     void require(NeuralOperation operation) const;
 
-private:
+  private:
     NeuralParameterSnapshot snapshot_;
     NeuralBackendKind backend_;
 };

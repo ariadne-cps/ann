@@ -26,16 +26,15 @@
  *  @brief Expose neural networks, execution and training to Python.
  */
 
-#include "pybind11.hpp"
-
-#include "ann/ann.hpp"
-#include "ann/network.hpp"
-#include "ann/backend.hpp"
-#include "ann/training.hpp"
-#include "ann/serialization.hpp"
-
 #include <cstddef>
 #include <vector>
+
+#include "ann/ann.hpp"
+#include "ann/backend.hpp"
+#include "ann/network.hpp"
+#include "ann/serialization.hpp"
+#include "ann/training.hpp"
+#include "pybind11.hpp"
 
 using namespace Ariadne;
 
@@ -51,8 +50,9 @@ void ann_submodule(pybind11::module& module) {
 
     pybind11::class_<NeuralDenseLayerSpec>(module, "NeuralDenseLayerSpec")
         .def(pybind11::init([](std::size_t outputs, NeuralActivation activation) {
-            return NeuralDenseLayerSpec{outputs, activation};
-        }), pybind11::arg("outputs"), pybind11::arg("activation"))
+                 return NeuralDenseLayerSpec{outputs, activation};
+             }),
+             pybind11::arg("outputs"), pybind11::arg("activation"))
         .def_readonly("outputs", &NeuralDenseLayerSpec::outputs)
         .def_readonly("activation", &NeuralDenseLayerSpec::activation);
 

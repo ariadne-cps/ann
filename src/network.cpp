@@ -56,12 +56,18 @@ std::size_t checked_multiply(std::size_t first, std::size_t second) {
 
 std::string_view neural_activation_name(NeuralActivation activation) {
     switch (activation) {
-        case NeuralActivation::Identity: return "identity";
-        case NeuralActivation::Relu: return "relu";
-        case NeuralActivation::Tanh: return "tanh";
-        case NeuralActivation::Sigmoid: return "sigmoid";
-        case NeuralActivation::Softplus: return "softplus";
-        default: throw std::invalid_argument("Unknown neural activation");
+        case NeuralActivation::Identity:
+            return "identity";
+        case NeuralActivation::Relu:
+            return "relu";
+        case NeuralActivation::Tanh:
+            return "tanh";
+        case NeuralActivation::Sigmoid:
+            return "sigmoid";
+        case NeuralActivation::Softplus:
+            return "softplus";
+        default:
+            throw std::invalid_argument("Unknown neural activation");
     }
 }
 
@@ -75,7 +81,7 @@ NeuralNetwork::NeuralNetwork(
     }
     layers_.reserve(layers.size());
     std::size_t inputs = input_dimension;
-    for (auto const& layer : layers) {
+    for (const auto& layer: layers) {
         if (layer.outputs == 0) {
             throw std::invalid_argument("Neural layers require positive dimensions");
         }
@@ -101,7 +107,7 @@ std::size_t NeuralNetwork::output_dimension() const noexcept {
 std::size_t NeuralNetwork::parameter_count() const noexcept {
     return parameter_count_;
 }
-std::vector<NeuralDenseLayerLayout> const& NeuralNetwork::layers() const noexcept {
+const std::vector<NeuralDenseLayerLayout>& NeuralNetwork::layers() const noexcept {
     return layers_;
 }
 
@@ -111,17 +117,17 @@ NeuralParameterSnapshot::NeuralParameterSnapshot(
     if (values_.size() != network_.parameter_count()) {
         throw std::invalid_argument("Wrong number of neural parameters");
     }
-    for (double value : values_) {
+    for (double value: values_) {
         if (!std::isfinite(value)) {
             throw std::invalid_argument("Neural parameters must be finite");
         }
     }
 }
 
-NeuralNetwork const& NeuralParameterSnapshot::network() const noexcept {
+const NeuralNetwork& NeuralParameterSnapshot::network() const noexcept {
     return network_;
 }
-std::vector<double> const& NeuralParameterSnapshot::values() const noexcept {
+const std::vector<double>& NeuralParameterSnapshot::values() const noexcept {
     return values_;
 }
 std::vector<double> NeuralParameterSnapshot::export_values() const {

@@ -29,12 +29,12 @@
 #ifndef ARIADNE_ANN_MODULE_HPP
 #define ARIADNE_ANN_MODULE_HPP
 
-#include "ariadne-threading.hpp"
-
 #include "ann/ann.hpp"
-#include "ann/network.hpp"
 #include "ann/backend.hpp"
-#include "ann/training.hpp"
+#include "ann/network.hpp"
 #include "ann/serialization.hpp"
+#include "ann/training.hpp"
+
+#include "ariadne-threading.hpp"
 
 #endif // ARIADNE_ANN_MODULE_HPP

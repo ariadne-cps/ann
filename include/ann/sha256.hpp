@@ -39,7 +39,7 @@ namespace Ariadne::Detail {
 
 /** @brief Implement incremental SHA-256 hashing under FIPS 180-4. */
 class Sha256 {
-public:
+  public:
     /** @brief Append raw bytes to the incremental SHA-256 hash. */
     void update(std::string_view bytes);
     /** @brief Hash a 64-bit integer in the canonical byte order. */
@@ -47,16 +47,15 @@ public:
     /** @brief Finalize the digest and return 64 lowercase hexadecimal characters. */
     std::string hex_digest();
 
-private:
-    std::array<std::uint32_t,8u> state_ = {
-        0x6a09e667u,0xbb67ae85u,0x3c6ef372u,0xa54ff53au,
-        0x510e527fu,0x9b05688cu,0x1f83d9abu,0x5be0cd19u
-    };
-    std::array<std::uint8_t,64u> block_{};
-    std::uint64_t bytes_processed_=0u;
-    std::size_t buffered_=0u;
+  private:
+    std::array<std::uint32_t, 8u> state_ = {
+        0x6a09e667u, 0xbb67ae85u, 0x3c6ef372u, 0xa54ff53au,
+        0x510e527fu, 0x9b05688cu, 0x1f83d9abu, 0x5be0cd19u};
+    std::array<std::uint8_t, 64u> block_{};
+    std::uint64_t bytes_processed_ = 0u;
+    std::size_t buffered_ = 0u;
     /** @brief Compress one 64-byte SHA-256 message block. */
-    void compress(std::uint8_t const* bytes);
+    void compress(const std::uint8_t* bytes);
 };
 
 } // namespace Ariadne::Detail

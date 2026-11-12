@@ -28,31 +28,32 @@
 
 #ifndef ARIADNE_ANN_CPU_INFERENCE_HPP
 #define ARIADNE_ANN_CPU_INFERENCE_HPP
-#include "ann/network.hpp"
-#include "ann/derivatives.hpp"
 #include <vector>
+
+#include "ann/derivatives.hpp"
+#include "ann/network.hpp"
 namespace Ariadne::NeuralCpu {
 /** @brief Evaluate a frozen model on one finite input vector. */
-std::vector<double> infer(NeuralParameterSnapshot const& snapshot,
-                          std::vector<double> const& input);
+std::vector<double> infer(const NeuralParameterSnapshot& snapshot,
+                          const std::vector<double>& input);
 /** @brief Evaluate independent input rows using the native CPU backend. */
 std::vector<std::vector<double>> infer_batch(
-    NeuralParameterSnapshot const& snapshot,
-    std::vector<std::vector<double>> const& inputs);
+    const NeuralParameterSnapshot& snapshot,
+    const std::vector<std::vector<double>>& inputs);
 /** @brief Compute a reverse-mode vector-Jacobian product for one sample. */
 NeuralGradientResult differentiate(
-    NeuralParameterSnapshot const& snapshot,
-    std::vector<double> const& input,
-    std::vector<double> const& output_cotangent);
+    const NeuralParameterSnapshot& snapshot,
+    const std::vector<double>& input,
+    const std::vector<double>& output_cotangent);
 /** @brief Compute the full Jacobian of outputs with respect to inputs. */
 std::vector<std::vector<double>> input_jacobian(
-    NeuralParameterSnapshot const& snapshot,
-    std::vector<double> const& input);
+    const NeuralParameterSnapshot& snapshot,
+    const std::vector<double>& input);
 /** @brief Reduce per-sample gradients by sum or mean across a batch. */
 NeuralBatchGradientResult differentiate_batch(
-    NeuralParameterSnapshot const& snapshot,
-    std::vector<std::vector<double>> const& inputs,
-    std::vector<std::vector<double>> const& output_cotangents,
+    const NeuralParameterSnapshot& snapshot,
+    const std::vector<std::vector<double>>& inputs,
+    const std::vector<std::vector<double>>& output_cotangents,
     NeuralGradientReduction reduction);
 } // namespace Ariadne::NeuralCpu
 #endif // ARIADNE_ANN_CPU_INFERENCE_HPP

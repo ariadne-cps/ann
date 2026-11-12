@@ -28,9 +28,10 @@
 #ifndef ARIADNE_ANN_SERIALIZATION_HPP
 #define ARIADNE_ANN_SERIALIZATION_HPP
 
+#include <string>
+
 #include "ann/network.hpp"
 #include "ann/training.hpp"
-#include <string>
 
 namespace Ariadne {
 
@@ -45,7 +46,7 @@ namespace Ariadne {
  *  Result: 64 lowercase hexadecimal characters. This identifies model
  *  content, NOT its author or provenance (there is no signature).
  */
-std::string neural_snapshot_sha256(NeuralParameterSnapshot const& snapshot);
+std::string neural_snapshot_sha256(const NeuralParameterSnapshot& snapshot);
 
 /** @brief Write the current manifest JSON and its Safetensors data file.
  *
@@ -58,9 +59,9 @@ std::string neural_snapshot_sha256(NeuralParameterSnapshot const& snapshot);
  *  @throws std::runtime_error for I/O errors.
  *  @throws std::invalid_argument for a rejected path or oversized model.
  */
-void neural_save_snapshot(NeuralParameterSnapshot const& snapshot,
-                          std::string const& manifest_path,
-                          std::string const& safetensors_path);
+void neural_save_snapshot(const NeuralParameterSnapshot& snapshot,
+                          const std::string& manifest_path,
+                          const std::string& safetensors_path);
 
 /** @brief Load the current JSON+Safetensors snapshot contract.
  *
@@ -74,8 +75,8 @@ void neural_save_snapshot(NeuralParameterSnapshot const& snapshot,
  *  @throws std::runtime_error for I/O errors.
  */
 NeuralParameterSnapshot neural_load_snapshot(
-    std::string const& manifest_path,
-    std::string const& safetensors_path);
+    const std::string& manifest_path,
+    const std::string& safetensors_path);
 
 /** @brief Save model files and a separate optimizer-state Safetensors file.
  *
@@ -84,10 +85,10 @@ NeuralParameterSnapshot neural_load_snapshot(
  *  All three paths must be distinct; publication is NOT atomic.
  */
 void neural_save_training_checkpoint(
-    NeuralTrainingSession const& session,
-    std::string const& manifest_path,
-    std::string const& safetensors_path,
-    std::string const& optimizer_path);
+    const NeuralTrainingSession& session,
+    const std::string& manifest_path,
+    const std::string& safetensors_path,
+    const std::string& optimizer_path);
 
 /** @brief Recover exact native-CPU optimizer state and frozen model.
  *
@@ -95,9 +96,9 @@ void neural_save_training_checkpoint(
  *  to agree. Does not load untrusted executable or pickle data.
  */
 NeuralTrainingSession neural_load_training_checkpoint(
-    std::string const& manifest_path,
-    std::string const& safetensors_path,
-    std::string const& optimizer_path);
+    const std::string& manifest_path,
+    const std::string& safetensors_path,
+    const std::string& optimizer_path);
 
 /** @brief Publish a new immutable model checkpoint directory via one rename.
  *
@@ -107,11 +108,11 @@ NeuralTrainingSession neural_load_training_checkpoint(
  *  overwritten. No schema or file format change; no crash-durability,
  *  multi-writer no-replace, or cross-filesystem guarantee is provided.
  */
-void neural_save_snapshot_atomic(NeuralParameterSnapshot const& snapshot,
-                                 std::string const& directory);
+void neural_save_snapshot_atomic(const NeuralParameterSnapshot& snapshot,
+                                 const std::string& directory);
 
 /** @brief Read a complete model checkpoint directory. */
-NeuralParameterSnapshot neural_load_snapshot_atomic(std::string const& directory);
+NeuralParameterSnapshot neural_load_snapshot_atomic(const std::string& directory);
 
 /** @brief Publish a complete new training checkpoint directory.
  *
@@ -119,12 +120,12 @@ NeuralParameterSnapshot neural_load_snapshot_atomic(std::string const& directory
  *  private staging sibling, verifies the model and optimizer contents,
  *  then renames the directory into place. Destination must be absent.
  */
-void neural_save_training_checkpoint_atomic(NeuralTrainingSession const& session,
-                                            std::string const& directory);
+void neural_save_training_checkpoint_atomic(const NeuralTrainingSession& session,
+                                            const std::string& directory);
 
 /** @brief Restore a complete training checkpoint directory. */
 NeuralTrainingSession neural_load_training_checkpoint_atomic(
-    std::string const& directory);
+    const std::string& directory);
 
 } // namespace Ariadne
 

@@ -28,18 +28,18 @@
 #ifndef ARIADNE_ANN_TRAINING_HPP
 #define ARIADNE_ANN_TRAINING_HPP
 
-#include "ann/network.hpp"
-
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+
+#include "ann/network.hpp"
 
 namespace Ariadne {
 
 /** @brief Loss summed over output components and averaged over samples. */
 enum class NeuralLossKind {
-    MeanSquaredError,           ///< 0.5 * sum_outputs (prediction - target)^2.
-    BinaryCrossEntropyWithLogits///< Independent binary labels, logits output.
+    MeanSquaredError,            ///< 0.5 * sum_outputs (prediction - target)^2.
+    BinaryCrossEntropyWithLogits ///< Independent binary labels, logits output.
 };
 
 /** @brief Concrete optimizer update rule, with no implicit schedule. */
@@ -52,11 +52,11 @@ enum class NeuralOptimizerKind {
 struct NeuralOptimizerOptions {
     NeuralOptimizerKind kind = NeuralOptimizerKind::Sgd;
     double learning_rate = 0.01; ///< Strictly positive, finite.
-    double momentum = 0.0; ///< SGD: in [0,1). AdamW: must be zero.
-    double weight_decay = 0.0; ///< Nonnegative. Coupled in SGD; decoupled in AdamW.
-    double beta1 = 0.9; ///< AdamW first-moment factor in [0,1).
-    double beta2 = 0.999; ///< AdamW second-moment factor in [0,1).
-    double epsilon = 1e-8; ///< AdamW positive denominator offset.
+    double momentum = 0.0;       ///< SGD: in [0,1). AdamW: must be zero.
+    double weight_decay = 0.0;   ///< Nonnegative. Coupled in SGD; decoupled in AdamW.
+    double beta1 = 0.9;          ///< AdamW first-moment factor in [0,1).
+    double beta2 = 0.999;        ///< AdamW second-moment factor in [0,1).
+    double epsilon = 1e-8;       ///< AdamW positive denominator offset.
 };
 
 /** @brief Immutable-by-convention complete native-CPU training state.
@@ -87,7 +87,7 @@ struct NeuralTrainingCheckpoint {
  *  Labels for this loss must be finite within [0,1].
  */
 class NeuralTrainingSession {
-public:
+  public:
     /** @brief Create a mutable session with an optional per-layer trainability mask.
      *
      *  An empty mask means every layer is trainable. Otherwise there must be
@@ -111,19 +111,19 @@ public:
     /** @brief Number of completed optimizer steps, not training examples. */
     std::size_t steps() const noexcept;
     /** @brief Per-layer update mask (true means trainable). */
-    std::vector<bool> const& trainable_layers() const noexcept;
+    const std::vector<bool>& trainable_layers() const noexcept;
     /** @brief Export a new, independent, immutable parameter snapshot. */
     NeuralParameterSnapshot export_snapshot() const;
     /** @brief Export the complete optimizer state for exact resumption. */
     NeuralTrainingCheckpoint export_checkpoint() const;
     /** @brief Calculate sample-mean objective without updating anything. */
-    double loss_batch(std::vector<std::vector<double>> const& inputs,
-                      std::vector<std::vector<double>> const& targets) const;
+    double loss_batch(const std::vector<std::vector<double>>& inputs,
+                      const std::vector<std::vector<double>>& targets) const;
     /** @brief Evaluate loss and apply exactly one step; return pre-update loss. */
-    double train_batch(std::vector<std::vector<double>> const& inputs,
-                       std::vector<std::vector<double>> const& targets);
+    double train_batch(const std::vector<std::vector<double>>& inputs,
+                       const std::vector<std::vector<double>>& targets);
 
-private:
+  private:
     NeuralParameterSnapshot snapshot_;
     NeuralOptimizerOptions options_;
     NeuralLossKind loss_;
@@ -140,7 +140,7 @@ private:
  *  rounding may vary slightly across floating-point implementations.
  */
 NeuralParameterSnapshot neural_initialize_parameters(NeuralNetwork network,
-                                                       std::uint64_t seed);
+                                                     std::uint64_t seed);
 
 /** @brief Return a new snapshot with the final dense layer replaced.
  *
@@ -150,7 +150,7 @@ NeuralParameterSnapshot neural_initialize_parameters(NeuralNetwork network,
  *  creates a new model identity; no optimizer state is transferred.
  */
 NeuralParameterSnapshot neural_replace_output_head(
-    NeuralParameterSnapshot const& source,
+    const NeuralParameterSnapshot& source,
     NeuralDenseLayerSpec new_head,
     std::uint64_t seed);
 

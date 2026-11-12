@@ -26,18 +26,20 @@
  *  @brief Demonstrate ANN inference and training.
  */
 
-#include "ariadne-ann.hpp"
-
-#include <iostream>
 #include <cstdio>
 #include <filesystem>
+#include <iostream>
 #include <string>
 #include <vector>
 
+#include "ariadne-ann.hpp"
+
 int main() {
     using namespace Ariadne;
-    NeuralNetwork network(2, {{2, NeuralActivation::Relu},
-                              {1, NeuralActivation::Identity}});
+    NeuralNetwork network(2, {
+                                 {2,     NeuralActivation::Relu},
+                                 {1, NeuralActivation::Identity}
+    });
     NeuralParameterSnapshot parameters(
         network, {1.0, -1.0, -1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0});
     NeuralExecutionSession session(parameters);
@@ -50,14 +52,20 @@ int main() {
               << session.supports(NeuralOperation::ImportSnapshot) << '\n'
               << "Inference available: "
               << session.supports(NeuralOperation::Inference) << '\n'
-              << "Single inference: " << session.infer({3.0, 1.0}).at(0) << '\n'
+              << "Single inference: " << session.infer({
+                                                           3.0, 1.0
+    })
+                                             .at(0)
+              << '\n'
               << "Batch inference: " << session.infer_batch({{3.0, 1.0}, {1.0, 4.0}}).at(1).at(0) << '\n'
               << "Input derivative of sum of outputs: "
               << session.differentiate({3.0, 1.0}, {1.0}).input_gradient.at(0) << '\n';
 
     NeuralOptimizerOptions optimizer;
     optimizer.learning_rate = 0.1;
-    NeuralNetwork regression(1, {{1, NeuralActivation::Identity}});
+    NeuralNetwork regression(1, {
+                                    {1, NeuralActivation::Identity}
+    });
     NeuralParameterSnapshot regression_start(regression, {0.0, 0.0});
     NeuralTrainingSession trainer(regression_start, optimizer);
     for (int step = 0; step < 70; ++step) {
@@ -66,35 +74,40 @@ int main() {
     std::cout << "Training steps: " << trainer.steps()
               << " | final MSE: " << trainer.loss_batch({{1.0}}, {{2.0}}) << '\n';
     // Store the frozen, trained model in two open files and reconstruct it.
-    auto const prefix = std::filesystem::temp_directory_path() /
-        "ariadne_neural_tutorial";
+    const auto prefix = std::filesystem::temp_directory_path() /
+                        "ariadne_neural_tutorial";
     const std::string manifest = prefix.string() + ".json";
     const std::string tensors = prefix.string() + ".safetensors";
-    auto const trained = trainer.export_snapshot();
+    const auto trained = trainer.export_snapshot();
     neural_save_snapshot(trained, manifest, tensors);
-    auto const restored = neural_load_snapshot(manifest, tensors);
+    const auto restored = neural_load_snapshot(manifest, tensors);
     std::cout << "Snapshot SHA-256: " << neural_snapshot_sha256(restored) << '\n';
     std::cout << "Restored parameters: " << restored.network().parameter_count()
               << " | first weight: " << restored.values().at(0) << '\n';
     // Replace the output head, freeze the trained feature layer and fine-tune.
-    NeuralNetwork base(1, {{2, NeuralActivation::Tanh},
-                           {1, NeuralActivation::Identity}});
+    NeuralNetwork base(1, {
+                              {2,     NeuralActivation::Tanh},
+                              {1, NeuralActivation::Identity}
+    });
     auto pretrained = neural_initialize_parameters(base, 19);
     auto transferred = neural_replace_output_head(
         pretrained, {2, NeuralActivation::Identity}, 29);
     NeuralTrainingSession fine_tuning(transferred, optimizer,
-        NeuralLossKind::MeanSquaredError, {false, true});
-    auto const preserved_prefix = transferred.values().at(0);
+                                      NeuralLossKind::MeanSquaredError, {false, true});
+    const auto preserved_prefix = transferred.values().at(0);
     for (int step = 0; step < 20; ++step)
-        (void)fine_tuning.train_batch({{1.0}}, {{1.0, -1.0}});
+        (void)fine_tuning.train_batch({
+                                          {1.0}
+        },
+                                      {{1.0, -1.0}});
     std::cout << "Fine-tuning steps: " << fine_tuning.steps()
               << " | preserved feature weight: "
               << (fine_tuning.export_snapshot().values().at(0) == preserved_prefix)
               << '\n';
     // Persist the complete optimizer state, then restore a resumable session.
-    const std::string optimizer_state=prefix.string()+".optimizer.safetensors";
-    neural_save_training_checkpoint(trainer,manifest,tensors,optimizer_state);
-    auto resumed=neural_load_training_checkpoint(manifest,tensors,optimizer_state);
+    const std::string optimizer_state = prefix.string() + ".optimizer.safetensors";
+    neural_save_training_checkpoint(trainer, manifest, tensors, optimizer_state);
+    auto resumed = neural_load_training_checkpoint(manifest, tensors, optimizer_state);
     std::cout << "Recovered optimizer steps: " << resumed.steps() << '\n';
     // Publish a separate complete checkpoint directory in one rename.
     const auto atomic_dir = prefix.string() + ".checkpoint";

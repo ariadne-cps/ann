@@ -27,10 +27,11 @@
  */
 
 #include "ann/backend.hpp"
-#include "ann/inference.hpp"
 
 #include <stdexcept>
 #include <utility>
+
+#include "ann/inference.hpp"
 
 namespace Ariadne {
 
@@ -48,13 +49,7 @@ bool neural_backend_available(NeuralBackendKind backend) noexcept {
 
 bool neural_backend_supports(
     NeuralBackendKind backend, NeuralOperation operation) noexcept {
-    return neural_backend_available(backend)
-        && (operation == NeuralOperation::ImportSnapshot
-            || operation == NeuralOperation::Inference
-            || operation == NeuralOperation::BatchInference
-            || operation == NeuralOperation::InputDerivatives
-            || operation == NeuralOperation::ParameterGradients
-            || operation == NeuralOperation::Training);
+    return neural_backend_available(backend) && (operation == NeuralOperation::ImportSnapshot || operation == NeuralOperation::Inference || operation == NeuralOperation::BatchInference || operation == NeuralOperation::InputDerivatives || operation == NeuralOperation::ParameterGradients || operation == NeuralOperation::Training);
 }
 
 NeuralExecutionSession::NeuralExecutionSession(
@@ -68,7 +63,7 @@ NeuralExecutionSession::NeuralExecutionSession(
 NeuralBackendKind NeuralExecutionSession::backend() const noexcept {
     return backend_;
 }
-NeuralParameterSnapshot const& NeuralExecutionSession::snapshot() const noexcept {
+const NeuralParameterSnapshot& NeuralExecutionSession::snapshot() const noexcept {
     return snapshot_;
 }
 NeuralParameterSnapshot NeuralExecutionSession::export_snapshot() const {
@@ -77,32 +72,31 @@ NeuralParameterSnapshot NeuralExecutionSession::export_snapshot() const {
 bool NeuralExecutionSession::supports(NeuralOperation operation) const noexcept {
     // Training belongs to the separate mutable NeuralTrainingSession,
     // not this frozen-snapshot execution session.
-    return operation != NeuralOperation::Training
-        && neural_backend_supports(backend_, operation);
+    return operation != NeuralOperation::Training && neural_backend_supports(backend_, operation);
 }
-std::vector<double> NeuralExecutionSession::infer(std::vector<double> const& input) const {
+std::vector<double> NeuralExecutionSession::infer(const std::vector<double>& input) const {
     require(NeuralOperation::Inference);
     return NeuralCpu::infer(snapshot_, input);
 }
 std::vector<std::vector<double>> NeuralExecutionSession::infer_batch(
-    std::vector<std::vector<double>> const& inputs) const {
+    const std::vector<std::vector<double>>& inputs) const {
     require(NeuralOperation::BatchInference);
     return NeuralCpu::infer_batch(snapshot_, inputs);
 }
 NeuralGradientResult NeuralExecutionSession::differentiate(
-    std::vector<double> const& input,
-    std::vector<double> const& output_cotangent) const {
+    const std::vector<double>& input,
+    const std::vector<double>& output_cotangent) const {
     require(NeuralOperation::ParameterGradients);
     return NeuralCpu::differentiate(snapshot_, input, output_cotangent);
 }
 std::vector<std::vector<double>> NeuralExecutionSession::input_jacobian(
-    std::vector<double> const& input) const {
+    const std::vector<double>& input) const {
     require(NeuralOperation::InputDerivatives);
     return NeuralCpu::input_jacobian(snapshot_, input);
 }
 NeuralBatchGradientResult NeuralExecutionSession::differentiate_batch(
-    std::vector<std::vector<double>> const& inputs,
-    std::vector<std::vector<double>> const& output_cotangents,
+    const std::vector<std::vector<double>>& inputs,
+    const std::vector<std::vector<double>>& output_cotangents,
     NeuralGradientReduction reduction) const {
     require(NeuralOperation::ParameterGradients);
     return NeuralCpu::differentiate_batch(snapshot_, inputs, output_cotangents, reduction);

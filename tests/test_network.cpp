@@ -26,32 +26,33 @@
  *  @brief Test canonical network layout and snapshots.
  */
 
-#include "ann/network.hpp"
-#include "ariadne-testing.hpp"
-
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
+#include "ann/network.hpp"
+
+#include "ariadne-testing.hpp"
+
 using namespace Ariadne;
 
 class TestNetwork : public Ariadne::Testing::ContextFixture {
-public:
+  public:
     using ContextFixture::ContextFixture;
 
     void test_offsets_and_activations() {
         NeuralNetwork network(2, {
-            {3, NeuralActivation::Tanh},
-            {1, NeuralActivation::Identity}
+                                     {3,     NeuralActivation::Tanh},
+                                     {1, NeuralActivation::Identity}
         });
         ARIADNE_TESTING_EXPECT_EQUAL(network.input_dimension(), std::size_t{2});
         ARIADNE_TESTING_EXPECT_EQUAL(network.output_dimension(), std::size_t{1});
         ARIADNE_TESTING_EXPECT_EQUAL(network.parameter_count(), std::size_t{13});
         ARIADNE_TESTING_EXPECT_EQUAL(network.layers().size(), std::size_t{2});
-        auto const& first = network.layers().at(0);
-        auto const& second = network.layers().at(1);
+        const auto& first = network.layers().at(0);
+        const auto& second = network.layers().at(1);
         ARIADNE_TESTING_EXPECT_EQUAL(first.inputs, std::size_t{2});
         ARIADNE_TESTING_EXPECT_EQUAL(first.outputs, std::size_t{3});
         ARIADNE_TESTING_EXPECT_EQUAL(first.weights_offset, std::size_t{0});
@@ -70,24 +71,36 @@ public:
 
     void test_invalid_topology() {
         ARIADNE_TESTING_EXPECT_THROWS(
-            std::invalid_argument, (void)NeuralNetwork(0, {{1, NeuralActivation::Identity}}));
+            std::invalid_argument, (void)NeuralNetwork(0, {
+                                                              {1, NeuralActivation::Identity}
+        }));
         ARIADNE_TESTING_EXPECT_THROWS(
             std::invalid_argument, (void)NeuralNetwork(2, {}));
         ARIADNE_TESTING_EXPECT_THROWS(
-            std::invalid_argument, (void)NeuralNetwork(2, {{0, NeuralActivation::Identity}}));
+            std::invalid_argument, (void)NeuralNetwork(2, {
+                                                              {0, NeuralActivation::Identity}
+        }));
         ARIADNE_TESTING_EXPECT_THROWS(
-            std::invalid_argument, (void)NeuralNetwork(1, {{2, static_cast<NeuralActivation>(77)}}));
+            std::invalid_argument, (void)NeuralNetwork(1, {
+                                                              {2, static_cast<NeuralActivation>(77)}
+        }));
         ARIADNE_TESTING_EXPECT_THROWS(
             std::invalid_argument, (void)neural_activation_name(static_cast<NeuralActivation>(100)));
         const std::size_t max = std::numeric_limits<std::size_t>::max();
         ARIADNE_TESTING_EXPECT_THROWS(
-            std::overflow_error, (void)NeuralNetwork(2, {{max, NeuralActivation::Identity}}));
+            std::overflow_error, (void)NeuralNetwork(2, {
+                                                            {max, NeuralActivation::Identity}
+        }));
         ARIADNE_TESTING_EXPECT_THROWS(
-            std::overflow_error, (void)NeuralNetwork(1, {{max, NeuralActivation::Identity}}));
+            std::overflow_error, (void)NeuralNetwork(1, {
+                                                            {max, NeuralActivation::Identity}
+        }));
     }
 
     void test_snapshot_copy_and_validation() {
-        NeuralNetwork network(2, {{1, NeuralActivation::Identity}});
+        NeuralNetwork network(2, {
+                                     {1, NeuralActivation::Identity}
+        });
         std::vector<double> original{1.25, -0.0, 3.5};
         NeuralParameterSnapshot snapshot(network, original);
         original.at(0) = 99.0;
@@ -102,11 +115,9 @@ public:
         ARIADNE_TESTING_EXPECT_THROWS(
             std::invalid_argument, (void)NeuralParameterSnapshot(network, {0.0, 1.0}));
         ARIADNE_TESTING_EXPECT_THROWS(
-            std::invalid_argument, (void)NeuralParameterSnapshot(network, {
-                0.0, std::numeric_limits<double>::infinity(), 0.0}));
+            std::invalid_argument, (void)NeuralParameterSnapshot(network, {0.0, std::numeric_limits<double>::infinity(), 0.0}));
         ARIADNE_TESTING_EXPECT_THROWS(
-            std::invalid_argument, (void)NeuralParameterSnapshot(network, {
-                0.0, std::numeric_limits<double>::quiet_NaN(), 0.0}));
+            std::invalid_argument, (void)NeuralParameterSnapshot(network, {0.0, std::numeric_limits<double>::quiet_NaN(), 0.0}));
     }
 };
 

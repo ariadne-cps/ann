@@ -26,13 +26,13 @@
  *  @brief Implement atomic checkpoint directory publication.
  */
 
-#include "ann/serialization.hpp"
-
 #include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <system_error>
 #include <utility>
+
+#include "ann/serialization.hpp"
 
 namespace Ariadne {
 namespace {
@@ -45,7 +45,7 @@ constexpr char optimizer_weights[] = "optimizer.safetensors";
 
 // The parent must already exist. Never create the destination directory
 // before all its files have been written and checked.
-fs::path publication_target(std::string const& directory) {
+fs::path publication_target(const std::string& directory) {
     if (directory.empty())
         throw std::invalid_argument("Checkpoint directory must be nonempty");
     const fs::path target(directory);
@@ -63,7 +63,7 @@ fs::path publication_target(std::string const& directory) {
     return target;
 }
 
-fs::path existing_checkpoint(std::string const& directory) {
+fs::path existing_checkpoint(const std::string& directory) {
     if (directory.empty())
         throw std::invalid_argument("Checkpoint directory must be nonempty");
     const fs::path path(directory);
@@ -73,15 +73,15 @@ fs::path existing_checkpoint(std::string const& directory) {
 }
 
 class StagingDirectory {
-public:
-    explicit StagingDirectory(fs::path const& destination) {
+  public:
+    explicit StagingDirectory(const fs::path& destination) {
         const fs::path parent = destination.has_parent_path()
-            ? destination.parent_path() : fs::path(".");
+                                  ? destination.parent_path()
+                                  : fs::path(".");
         // Candidate names are deterministic (destination.staging.N): the
         // existence check plus the attempt suffix handle collisions, so no
         // clock or process-local entropy is needed.
-        const std::string prefix = destination.filename().string()
-            + ".staging.";
+        const std::string prefix = destination.filename().string() + ".staging.";
         std::error_code ec;
         for (unsigned attempt = 0u; attempt != 64u; ++attempt) {
             const auto candidate = parent / (prefix + std::to_string(attempt));
@@ -99,8 +99,8 @@ public:
             "Cannot allocate checkpoint staging directory: " + ec.message());
     }
 
-    StagingDirectory(StagingDirectory const&) = delete;
-    StagingDirectory& operator=(StagingDirectory const&) = delete;
+    StagingDirectory(const StagingDirectory&) = delete;
+    StagingDirectory& operator=(const StagingDirectory&) = delete;
 
     ~StagingDirectory() {
         if (!path_.empty()) {
@@ -109,9 +109,9 @@ public:
         }
     }
 
-    fs::path const& path() const noexcept { return path_; }
+    const fs::path& path() const noexcept { return path_; }
 
-    void publish(fs::path const& destination) {
+    void publish(const fs::path& destination) {
         // Do not intentionally replace existing checkpoints, including a
         // dangling symlink or a preexisting empty destination directory.
         std::error_code ec;
@@ -120,22 +120,22 @@ public:
         // The staging directory is a sibling of the destination. This single
         // rename makes all files visible together on a supported filesystem.
         fs::rename(path_, destination);
-        path_.clear();  // Ownership transferred; cleanup must not touch it.
+        path_.clear(); // Ownership transferred; cleanup must not touch it.
     }
 
-private:
+  private:
     fs::path path_;
 };
 
-fs::path file(fs::path const& directory, char const* basename) {
+fs::path file(const fs::path& directory, const char* basename) {
     return directory / basename;
 }
 
 } // namespace
 
 void neural_save_snapshot_atomic(
-    NeuralParameterSnapshot const& snapshot,
-    std::string const& directory) {
+    const NeuralParameterSnapshot& snapshot,
+    const std::string& directory) {
     const auto destination = publication_target(directory);
     StagingDirectory stage(destination);
     neural_save_snapshot(snapshot,
@@ -153,15 +153,15 @@ void neural_save_snapshot_atomic(
 }
 
 NeuralParameterSnapshot neural_load_snapshot_atomic(
-    std::string const& directory) {
+    const std::string& directory) {
     const auto published = existing_checkpoint(directory);
     return neural_load_snapshot(file(published, model_manifest).string(),
                                 file(published, model_weights).string());
 }
 
 void neural_save_training_checkpoint_atomic(
-    NeuralTrainingSession const& session,
-    std::string const& directory) {
+    const NeuralTrainingSession& session,
+    const std::string& directory) {
     const auto destination = publication_target(directory);
     StagingDirectory stage(destination);
     neural_save_training_checkpoint(
@@ -181,7 +181,7 @@ void neural_save_training_checkpoint_atomic(
 }
 
 NeuralTrainingSession neural_load_training_checkpoint_atomic(
-    std::string const& directory) {
+    const std::string& directory) {
     const auto published = existing_checkpoint(directory);
     return neural_load_training_checkpoint(
         file(published, model_manifest).string(),

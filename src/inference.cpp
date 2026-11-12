@@ -36,7 +36,8 @@ namespace Ariadne::NeuralCpu {
 namespace {
 
 double sigmoid(double x) {
-    if (x >= 0.0) return 1.0 / (1.0 + std::exp(-x));
+    if (x >= 0.0)
+        return 1.0 / (1.0 + std::exp(-x));
     const double exp_x = std::exp(x);
     return exp_x / (1.0 + exp_x);
 }
@@ -83,20 +84,20 @@ double finite_fma(double lhs, double rhs, double initial) {
     return value;
 }
 
-void validate_input(NeuralNetwork const& network,
-                    std::vector<double> const& input) {
+void validate_input(const NeuralNetwork& network,
+                    const std::vector<double>& input) {
     if (input.size() != network.input_dimension())
         throw std::invalid_argument("Wrong number of neural input features");
-    for (double x : input)
+    for (double x: input)
         if (!std::isfinite(x))
             throw std::invalid_argument("Neural inputs must be finite");
 }
 
-void validate_cotangent(NeuralNetwork const& network,
-                        std::vector<double> const& cotangent) {
+void validate_cotangent(const NeuralNetwork& network,
+                        const std::vector<double>& cotangent) {
     if (cotangent.size() != network.output_dimension())
         throw std::invalid_argument("Wrong number of output cotangent features");
-    for (double x : cotangent)
+    for (double x: cotangent)
         if (!std::isfinite(x))
             throw std::invalid_argument("Neural output cotangents must be finite");
 }
@@ -104,8 +105,10 @@ void validate_cotangent(NeuralNetwork const& network,
 void validate_reduction(NeuralGradientReduction reduction) {
     switch (reduction) {
         case NeuralGradientReduction::Sum:
-        case NeuralGradientReduction::Mean: return;
-        default: throw std::invalid_argument("Unknown neural gradient reduction");
+        case NeuralGradientReduction::Mean:
+            return;
+        default:
+            throw std::invalid_argument("Unknown neural gradient reduction");
     }
 }
 
@@ -115,8 +118,8 @@ struct ForwardTrace {
 };
 
 /** @brief Shared forward kernel; optionally cache intermediates for reverse mode. */
-std::vector<double> forward(NeuralParameterSnapshot const& snapshot,
-                            std::vector<double> const& input,
+std::vector<double> forward(const NeuralParameterSnapshot& snapshot,
+                            const std::vector<double>& input,
                             ForwardTrace* trace = nullptr) {
     std::vector<double> current = input;
     if (trace) {
@@ -124,17 +127,19 @@ std::vector<double> forward(NeuralParameterSnapshot const& snapshot,
         trace->preactivations.reserve(snapshot.network().layers().size());
         trace->activations.push_back(input);
     }
-    auto const& parameters = snapshot.values();
-    for (auto const& layer : snapshot.network().layers()) {
+    const auto& parameters = snapshot.values();
+    for (const auto& layer: snapshot.network().layers()) {
         std::vector<double> next(layer.outputs);
         std::vector<double> preactivation;
-        if (trace) preactivation.resize(layer.outputs);
+        if (trace)
+            preactivation.resize(layer.outputs);
         for (std::size_t output = 0; output < layer.outputs; ++output) {
             double sum = parameters[layer.biases_offset + output];
             const std::size_t offset = layer.weights_offset + output * layer.inputs;
             for (std::size_t feature = 0; feature < layer.inputs; ++feature)
                 sum = finite_fma(parameters[offset + feature], current[feature], sum);
-            if (trace) preactivation[output] = sum;
+            if (trace)
+                preactivation[output] = sum;
             // sum is finite (finite bias plus finite_fma accumulation) and
             // every activation maps finite inputs to finite outputs.
             next[output] = activate(layer.activation, sum);
@@ -150,21 +155,20 @@ std::vector<double> forward(NeuralParameterSnapshot const& snapshot,
 
 /** @brief Unchecked dimensions only: callers have validated the sample. */
 NeuralGradientResult differentiate_validated(
-    NeuralParameterSnapshot const& snapshot,
-    std::vector<double> const& input,
-    std::vector<double> const& cotangent) {
+    const NeuralParameterSnapshot& snapshot,
+    const std::vector<double>& input,
+    const std::vector<double>& cotangent) {
     ForwardTrace trace;
     (void)forward(snapshot, input, &trace);
-    auto const& layers = snapshot.network().layers();
-    auto const& parameters = snapshot.values();
+    const auto& layers = snapshot.network().layers();
+    const auto& parameters = snapshot.values();
 
     NeuralGradientResult result{
         std::vector<double>(snapshot.network().input_dimension(), 0.0),
-        std::vector<double>(snapshot.network().parameter_count(), 0.0)
-    };
+        std::vector<double>(snapshot.network().parameter_count(), 0.0)};
     std::vector<double> upstream = cotangent;
     for (std::size_t index = layers.size(); index-- > 0;) {
-        auto const& layer = layers[index];
+        const auto& layer = layers[index];
         std::vector<double> previous(layer.inputs, 0.0);
         for (std::size_t o = 0; o < layer.outputs; ++o) {
             const double local = activation_derivative(
@@ -188,35 +192,36 @@ NeuralGradientResult differentiate_validated(
 
 } // namespace
 
-std::vector<double> infer(NeuralParameterSnapshot const& snapshot,
-                          std::vector<double> const& input) {
+std::vector<double> infer(const NeuralParameterSnapshot& snapshot,
+                          const std::vector<double>& input) {
     validate_input(snapshot.network(), input);
     return forward(snapshot, input);
 }
 
 std::vector<std::vector<double>> infer_batch(
-    NeuralParameterSnapshot const& snapshot,
-    std::vector<std::vector<double>> const& inputs) {
-    for (auto const& input : inputs) validate_input(snapshot.network(), input);
+    const NeuralParameterSnapshot& snapshot,
+    const std::vector<std::vector<double>>& inputs) {
+    for (const auto& input: inputs)
+        validate_input(snapshot.network(), input);
     std::vector<std::vector<double>> result;
     result.reserve(inputs.size());
-    for (auto const& input : inputs)
+    for (const auto& input: inputs)
         result.push_back(forward(snapshot, input));
     return result;
 }
 
 NeuralGradientResult differentiate(
-    NeuralParameterSnapshot const& snapshot,
-    std::vector<double> const& input,
-    std::vector<double> const& output_cotangent) {
+    const NeuralParameterSnapshot& snapshot,
+    const std::vector<double>& input,
+    const std::vector<double>& output_cotangent) {
     validate_input(snapshot.network(), input);
     validate_cotangent(snapshot.network(), output_cotangent);
     return differentiate_validated(snapshot, input, output_cotangent);
 }
 
 std::vector<std::vector<double>> input_jacobian(
-    NeuralParameterSnapshot const& snapshot,
-    std::vector<double> const& input) {
+    const NeuralParameterSnapshot& snapshot,
+    const std::vector<double>& input) {
     validate_input(snapshot.network(), input);
     std::vector<std::vector<double>> jacobian;
     jacobian.reserve(snapshot.network().output_dimension());
@@ -224,16 +229,17 @@ std::vector<std::vector<double>> input_jacobian(
     for (std::size_t o = 0; o < cotangent.size(); ++o) {
         cotangent[o] = 1.0;
         jacobian.push_back(differentiate_validated(
-            snapshot, input, cotangent).input_gradient);
+                               snapshot, input, cotangent)
+                               .input_gradient);
         cotangent[o] = 0.0;
     }
     return jacobian;
 }
 
 NeuralBatchGradientResult differentiate_batch(
-    NeuralParameterSnapshot const& snapshot,
-    std::vector<std::vector<double>> const& inputs,
-    std::vector<std::vector<double>> const& output_cotangents,
+    const NeuralParameterSnapshot& snapshot,
+    const std::vector<std::vector<double>>& inputs,
+    const std::vector<std::vector<double>>& output_cotangents,
     NeuralGradientReduction reduction) {
     validate_reduction(reduction);
     if (inputs.size() != output_cotangents.size())
@@ -245,8 +251,7 @@ NeuralBatchGradientResult differentiate_batch(
         validate_cotangent(snapshot.network(), output_cotangents[n]);
     }
     NeuralBatchGradientResult result{
-        {}, std::vector<double>(snapshot.network().parameter_count(), 0.0)
-    };
+        {}, std::vector<double>(snapshot.network().parameter_count(), 0.0)};
     result.input_gradients.reserve(inputs.size());
     for (std::size_t n = 0; n < inputs.size(); ++n) {
         auto gradient = differentiate_validated(
@@ -258,9 +263,11 @@ NeuralBatchGradientResult differentiate_batch(
     }
     if (reduction == NeuralGradientReduction::Mean) {
         const double divisor = static_cast<double>(inputs.size());
-        for (auto& row : result.input_gradients)
-            for (double& value : row) value /= divisor;
-        for (double& value : result.parameter_gradient) value /= divisor;
+        for (auto& row: result.input_gradients)
+            for (double& value: row)
+                value /= divisor;
+        for (double& value: result.parameter_gradient)
+            value /= divisor;
     }
     return result;
 }

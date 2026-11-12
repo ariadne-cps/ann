@@ -34,8 +34,8 @@ namespace Ariadne {
 
 /** @brief Reduction over independently scalarized sample outputs. */
 enum class NeuralGradientReduction {
-    Sum,  ///< Sum sample objectives and all corresponding gradients.
-    Mean  ///< Divide the sum by the nonzero number of samples.
+    Sum, ///< Sum sample objectives and all corresponding gradients.
+    Mean ///< Divide the sum by the nonzero number of samples.
 };
 
 /** @brief Gradient of output_cotangent dot network(input).
