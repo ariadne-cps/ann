@@ -1,5 +1,5 @@
 /***************************************************************************
- *            benchmark_optimizers.cpp
+ *            benchmarks/benchmark_optimizers.cpp
  *
  *  Copyright  2026  Luca Geretti
  *
@@ -15,11 +15,15 @@
  *
  *  Ariadne ANN is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne ANN.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne ANN. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/** @file benchmarks/benchmark_optimizers.cpp
+ *  @brief Benchmark CPU training optimizers and convergence costs.
  */
 
 #include "ariadne-ann.hpp"
