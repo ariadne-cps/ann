@@ -34,6 +34,7 @@
 
 #include "ariadne-ann.hpp"
 #include "ariadne-testing.hpp"
+#include "logging/test_runner.hpp"
 
 using namespace Ariadne;
 
@@ -515,5 +516,5 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestTraining, test_m5_head_replacement_and_fine_tuning);
     ARIADNE_TESTING_ADD_TEST(TestTraining, test_m5_invalid_freeze_and_head);
     ARIADNE_TESTING_ADD_TEST(TestTraining, test_validation_and_failure_atomicity);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

@@ -35,6 +35,7 @@
 #include "ann/network.hpp"
 
 #include "ariadne-testing.hpp"
+#include "logging/test_runner.hpp"
 
 using namespace Ariadne;
 
@@ -126,5 +127,5 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestNetwork, test_offsets_and_activations);
     ARIADNE_TESTING_ADD_TEST(TestNetwork, test_invalid_topology);
     ARIADNE_TESTING_ADD_TEST(TestNetwork, test_snapshot_copy_and_validation);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

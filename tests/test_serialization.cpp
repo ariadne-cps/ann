@@ -46,6 +46,7 @@
 
 #include "ariadne-ann.hpp"
 #include "ariadne-testing.hpp"
+#include "logging/test_runner.hpp"
 #if !defined(_WIN32)
 #include <csignal>
 
@@ -1022,5 +1023,5 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestSerialization, test_atomic_checkpoint_rejection);
     ARIADNE_TESTING_ADD_TEST(TestSerialization, test_atomic_checkpoint_staging);
     ARIADNE_TESTING_ADD_TEST(TestSerialization, test_atomic_checkpoint_publish_race);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

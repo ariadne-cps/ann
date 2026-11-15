@@ -33,6 +33,7 @@
 
 #include "ariadne-ann.hpp"
 #include "ariadne-testing.hpp"
+#include "logging/test_runner.hpp"
 
 using namespace Ariadne;
 
@@ -212,5 +213,5 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestDerivatives, test_smooth_multilayer_finite_difference);
     ARIADNE_TESTING_ADD_TEST(TestDerivatives, test_relu_kink_and_stable_derivatives);
     ARIADNE_TESTING_ADD_TEST(TestDerivatives, test_invalid_shapes_and_nonfinite_gradients);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }
