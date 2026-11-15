@@ -32,9 +32,9 @@
 #include <vector>
 
 #include "ann/backend.hpp"
+#include "logging/test_runner.hpp"
 
 #include "ariadne-testing.hpp"
-#include "logging/test_runner.hpp"
 
 using namespace Ariadne;
 

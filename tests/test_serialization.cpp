@@ -43,10 +43,10 @@
 #include <vector>
 
 #include "ann/sha256.hpp"
+#include "logging/test_runner.hpp"
 
 #include "ariadne-ann.hpp"
 #include "ariadne-testing.hpp"
-#include "logging/test_runner.hpp"
 #if !defined(_WIN32)
 #include <csignal>
 

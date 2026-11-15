@@ -33,9 +33,9 @@
 #include <vector>
 
 #include "ann/network.hpp"
+#include "logging/test_runner.hpp"
 
 #include "ariadne-testing.hpp"
-#include "logging/test_runner.hpp"
 
 using namespace Ariadne;
 

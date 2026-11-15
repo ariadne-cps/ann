@@ -31,9 +31,10 @@
 #include <stdexcept>
 #include <vector>
 
+#include "logging/test_runner.hpp"
+
 #include "ariadne-ann.hpp"
 #include "ariadne-testing.hpp"
-#include "logging/test_runner.hpp"
 
 using namespace Ariadne;
 
