@@ -11,7 +11,7 @@ set(UNIT_TESTS
 foreach(TEST IN LISTS UNIT_TESTS)
     add_executable(${TEST} ${TEST}.cpp)
     target_link_libraries(${TEST} PRIVATE ariadne-ann ann ariadne-testing)
-    add_test(NAME ${TEST} COMMAND $<TARGET_FILE:${TEST}> --concise)
+    ariadne_add_silent_test(NAME ${TEST} COMMAND $<TARGET_FILE:${TEST}> --concise)
     set_property(TEST ${TEST} PROPERTY LABELS "ann")
     if(WIN32)
         set_tests_properties(${TEST} PROPERTIES
